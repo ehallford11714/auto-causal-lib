@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="AutoCausalLib">
+  <defs>
+    <linearGradient id="acBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#acBg)"/>
+  <circle cx="36" cy="70" r="12" fill="#F59E0B"/>
+  <circle cx="64" cy="42" r="12" fill="#38BDF8"/>
+  <circle cx="92" cy="70" r="12" fill="#A3E635"/>
+  <path d="M36 58 L64 54 L92 58" fill="none" stroke="#E2E8F0" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M48 70 H80" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 4"/>
+  <path d="M64 54 V78" fill="none" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+  <rect x="54" y="86" width="20" height="8" rx="2" fill="#F8FAFC" opacity="0.9"/>
+</svg>
