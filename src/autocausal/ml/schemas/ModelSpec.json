@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autocausal.local/schemas/ModelSpec.v1.json",
+  "title": "ModelSpec",
+  "description": "Mirror of shared_contracts/ModelSpec.v1 — SLM ModelConstructPlan.",
+  "type": "object",
+  "required": ["schema", "payload"],
+  "properties": {
+    "schema": { "const": "ModelSpec.v1" },
+    "produced_by": { "type": "string" },
+    "produced_at": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["imputer", "predictor"],
+      "properties": {
+        "imputer": { "type": "string" },
+        "predictor": { "type": "string" },
+        "kpi_focus": { "type": "array", "items": { "type": "string" } },
+        "outcome": { "type": ["string", "null"] },
+        "feature_columns": { "type": "array", "items": { "type": "string" } },
+        "backend": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

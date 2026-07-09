@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autocausal"
-version = "0.2.0"
-description = "Auto-impute, mine, discover, guide, and ground exploratory causal relationships from CSV and SQL databases."
+version = "0.5.0"
+description = "Auto-impute, mine, discover, KPI ML loops (SLM→PyTorch), physics predictive loop, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -48,11 +48,14 @@ firebird = ["sqlalchemy-firebird>=0.8"]
 hana = ["sqlalchemy-hana>=0.5"]
 sqlite = []
 slm = ["torch>=2.0", "transformers>=4.36"]
+torch = ["torch>=2.0"]
+sklearn = ["scikit-learn>=1.3"]
+ml = ["autocausal[torch,sklearn]"]
 nlp = ["nltk>=3.8", "gensim>=4.3"]
 nlp-full = ["autocausal[nlp]", "spacy>=3.7"]
 causal-extra = ["dowhy>=0.11", "econml>=0.15"]
 web = ["httpx>=0.27"]
-suite = ["autocausal[nlp,slm,web]"]
+suite = ["autocausal[nlp,slm,web,ml]"]
 all-drivers = [
   "autocausal[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,databricks,synapse,parquet]",
 ]
@@ -68,7 +71,7 @@ Documentation = "docs/CONNECTIONS.md"
 where = ["src"]
 
 [tool.setuptools.package-data]
-autocausal = ["data/**/*", "data/public/**/*"]
+autocausal = ["data/**/*", "data/public/**/*", "ml/schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

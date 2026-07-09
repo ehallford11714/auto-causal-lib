@@ -131,6 +131,38 @@ def render_auto_markdown(result: "AutoResult") -> str:
         lines.append("")
         lines.append(f"- Backend: `{result.guide.get('backend')}`")
         lines.append("")
+    if result.direction_plan:
+        lines.append("## Direction plan")
+        lines.append("")
+        lines.append(
+            f"- Backends: {', '.join(result.direction_plan.get('backends') or [])}"
+        )
+        focus = result.direction_plan.get("focus_columns") or []
+        if focus:
+            lines.append(f"- Focus: {', '.join(f'`{c}`' for c in focus[:12])}")
+        z = result.direction_plan.get("candidate_z") or []
+        if z:
+            lines.append(f"- Candidate Z: {', '.join(f'`{c}`' for c in z[:8])}")
+        unavail = result.direction_plan.get("unavailable") or []
+        if unavail:
+            lines.append(f"- Soft-unavailable: {', '.join(f'`{u}`' for u in unavail)}")
+        lines.append("")
+    if getattr(result, "physics", None):
+        phys = result.physics or {}
+        lines.append("## Physics loop")
+        lines.append("")
+        lines.append(
+            f"- Backend: `{phys.get('backend')}` · horizon={phys.get('horizon')} · "
+            f"second_pass={phys.get('second_pass')}"
+        )
+        traj = phys.get("trajectory") or {}
+        lines.append(
+            f"- Trajectory: system=`{traj.get('system')}` · "
+            f"steps={len(traj.get('points') or [])}"
+        )
+        pg = phys.get("physical_grounding") or {}
+        lines.append(f"- Physical insights: {len(pg.get('insights') or [])}")
+        lines.append("")
     if result.notes:
         lines.append("## Pipeline notes")
         lines.append("")

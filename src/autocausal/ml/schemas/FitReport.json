@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autocausal.local/schemas/FitReport.v1.json",
+  "title": "FitReport",
+  "description": "Mirror of shared_contracts/FitReport.v1.",
+  "type": "object",
+  "required": ["schema", "payload"],
+  "properties": {
+    "schema": { "const": "FitReport.v1" },
+    "produced_by": { "type": "string" },
+    "produced_at": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["imputer", "predictor"],
+      "properties": {
+        "imputer": { "type": "string" },
+        "predictor": { "type": "string" },
+        "metrics": { "type": "object" },
+        "torch_used": { "type": "boolean" },
+        "sklearn_used": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

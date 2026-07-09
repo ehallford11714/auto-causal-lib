@@ -1,4 +1,4 @@
-"""CLI: python -m autocausal discover|mine|ping|guide|create|infer|tools|auto|public ..."""
+"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public ..."""
 
 from __future__ import annotations
 
@@ -17,6 +17,12 @@ def _emit(text: str, out: Optional[str]) -> None:
         Path(out).write_text(text, encoding="utf-8")
         print(f"Wrote {out}", file=sys.stderr)
     print(text)
+
+
+def _parse_guides(raw: Optional[str]) -> Optional[list[str]]:
+    if not raw:
+        return None
+    return [x.strip() for x in raw.split(",") if x.strip()]
 
 
 def _load_ac(args: argparse.Namespace) -> AutoCausal:
@@ -103,9 +109,38 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_source_args(g)
     g.add_argument("--text", type=str, default=None, help="User question / hint")
     g.add_argument("--slm", action="store_true", help="Use HuggingFace SLM (needs autocausal[slm])")
+    g.add_argument(
+        "--guides",
+        type=str,
+        default=None,
+        help="Comma-separated backends: llmintent,retracement,kineteq_pivot,rule,huggingface",
+    )
     g.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     g.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
     g.add_argument("-o", "--out", type=str, default=None)
+
+    # direct (direction steering)
+    di = sub.add_parser("direct", help="Steer causal direction with guide backends -> DirectionPlan")
+    _add_source_args(di)
+    di.add_argument("--text", type=str, default=None)
+    di.add_argument(
+        "--guides",
+        type=str,
+        default="llmintent,retracement,kineteq_pivot,rule",
+        help="Comma-separated guide backends",
+    )
+    di.add_argument("--slm", action="store_true")
+    di.add_argument("--no-second-pass", action="store_true")
+    di.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
+    di.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
+    di.add_argument("-o", "--out", type=str, default=None)
+
+    # guides registry
+    guides = sub.add_parser("guides", help="Direction-steering guide backend registry")
+    guides_sub = guides.add_subparsers(dest="guides_cmd")
+    gl = guides_sub.add_parser("list", help="Show which backends are available")
+    gl.add_argument("--format", choices=["json", "table"], default="table", dest="fmt")
+    guides_sub.add_parser("status", help="Detailed guides + env status")
 
     # create (SLM-aided creation)
     cr = sub.add_parser("create", help="Propose causal questions / instruments / morphemes")
@@ -146,14 +181,65 @@ def _build_parser() -> argparse.ArgumentParser:
     ti.add_argument("--d", type=str, default=None)
     ti.add_argument("--z", type=str, default=None)
 
+    # physics suite
+    phys = sub.add_parser("physics", help="Physics predictive engine / autocausal loop")
+    phys_sub = phys.add_subparsers(dest="physics_cmd")
+    pl = phys_sub.add_parser("loop", help="Mine -> discover -> rollout -> physical ground -> guide")
+    _add_source_args(pl)
+    pl.add_argument("--horizon", type=int, default=5)
+    pl.add_argument("--text", type=str, default=None)
+    pl.add_argument(
+        "--system",
+        choices=["damped_oscillator", "drift_diffusion", "linear_ode"],
+        default="damped_oscillator",
+    )
+    pl.add_argument(
+        "--domain",
+        type=str,
+        default="auto",
+        help="mechanics-lite | markets-as-dynamics | affect-as-dynamics | auto",
+    )
+    pl.add_argument("--slm", action="store_true")
+    pl.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
+    pl.add_argument("--no-second-pass", action="store_true")
+    pl.add_argument("--web-ground", action="store_true", dest="web_ground")
+    pl.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
+    pl.add_argument("-o", "--out", type=str, default=None)
+    pr = phys_sub.add_parser("rollout", help="Physics-only KPI/state rollout")
+    _add_source_args(pr)
+    pr.add_argument("--horizon", type=int, default=5)
+    pr.add_argument(
+        "--system",
+        choices=["damped_oscillator", "drift_diffusion", "linear_ode"],
+        default="damped_oscillator",
+    )
+    pr.add_argument("--discover", action="store_true", help="Fit edge coupling from discover first")
+    pr.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
+    pr.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
+    pr.add_argument("-o", "--out", type=str, default=None)
+
     # auto
     a = sub.add_parser("auto", help="Full pipeline: join? mine impute discover guide ground")
     _add_source_args(a)
     a.add_argument("--text", type=str, default=None)
     a.add_argument("--slm", action="store_true")
+    a.add_argument(
+        "--guides",
+        type=str,
+        default=None,
+        help="Comma-separated guide backends (enables DirectionPlan steering)",
+    )
     a.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     a.add_argument("--web-ground", action="store_true", dest="web_ground")
     a.add_argument("--no-second-pass", action="store_true")
+    a.add_argument("--physics", action="store_true", help="Run physics predictive loop")
+    a.add_argument("--horizon", type=int, default=5, help="Physics rollout horizon (with --physics)")
+    a.add_argument(
+        "--physics-system",
+        choices=["damped_oscillator", "drift_diffusion", "linear_ode"],
+        default="damped_oscillator",
+        dest="physics_system",
+    )
     a.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
     a.add_argument("-o", "--out", type=str, default=None)
 
@@ -169,6 +255,43 @@ def _build_parser() -> argparse.ArgumentParser:
     pub_load.add_argument("id", type=str)
     pub_load.add_argument("--allow-network", action="store_true")
     pub_load.add_argument("-o", "--out", type=str, default=None)
+
+    # ml — KPI-mined loop + imputer fit
+    ml = sub.add_parser("ml", help="KPI-mined causal loop / ML Model Hub slice")
+    ml_sub = ml.add_subparsers(dest="ml_cmd")
+    ml_loop = ml_sub.add_parser(
+        "loop",
+        help="Mine KPIs -> SLM/Rule ModelConstructPlan -> impute -> discover -> physics",
+    )
+    _add_source_args(ml_loop)
+    ml_loop.add_argument("--text", type=str, default="")
+    ml_loop.add_argument("--torch", action="store_true", help="Prefer PyTorch MLP when installed")
+    ml_loop.add_argument("--slm", action="store_true", help="Enable HuggingFace SLM guide")
+    ml_loop.add_argument(
+        "--guides",
+        type=str,
+        default="rule",
+        help="Comma-separated guides: rule,slm/huggingface,llmintent,kineteq_pivot",
+    )
+    ml_loop.add_argument("--horizon", type=int, default=5)
+    ml_loop.add_argument("--no-physics", action="store_true")
+    ml_loop.add_argument("--epochs", type=int, default=40)
+    ml_loop.add_argument(
+        "--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt"
+    )
+    ml_loop.add_argument("-o", "--out", type=str, default=None)
+    ml_fit = ml_sub.add_parser("fit-imputer", help="Fit imputer only (torch|sklearn|median)")
+    _add_source_args(ml_fit)
+    ml_fit.add_argument(
+        "--backend",
+        choices=["torch", "sklearn", "median", "torch_mlp", "iterative"],
+        default="median",
+    )
+    ml_fit.add_argument("--epochs", type=int, default=40)
+    ml_fit.add_argument(
+        "--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt"
+    )
+    ml_fit.add_argument("-o", "--out", type=str, default=None)
 
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
@@ -201,6 +324,29 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         text = json.dumps(payload, indent=2)
         _emit(text, args.out)
+        return 0
+
+    if args.command == "guides":
+        from autocausal.guides import guides_status, list_guides
+
+        if args.guides_cmd == "status":
+            print(json.dumps(guides_status(), indent=2))
+            return 0
+        if args.guides_cmd in (None, "list"):
+            rows = list_guides()
+            fmt = getattr(args, "fmt", "table")
+            if fmt == "json":
+                print(json.dumps(rows, indent=2))
+            else:
+                print(f"{'id':16} {'available':10} {'priority':8} name / detail")
+                for r in rows:
+                    avail = "yes" if r["available"] else "no*"
+                    print(
+                        f"{r['id']:16} {avail:10} {r['priority']:<8} {r['name']} — {r['detail']}"
+                    )
+                print("\n* soft-optional; stubs/fallbacks still run when selected")
+            return 0
+        parser.parse_args(["guides", "--help"])
         return 0
 
     if args.command == "public":
@@ -274,13 +420,47 @@ def main(argv: list[str] | None = None) -> int:
         ac.mine()
         ac.impute(method=args.impute)
         ac.discover()
-        gres = ac.guide(text=args.text, use_slm=args.slm)
-        if args.fmt == "json":
-            text = gres.to_json()
-        elif args.fmt == "both":
-            text = gres.to_markdown() + "\n\n```json\n" + gres.to_json() + "\n```\n"
+        backends = _parse_guides(args.guides)
+        gres = ac.guide(text=args.text, use_slm=args.slm, backends=backends)
+        if backends and ac.direction_plan is not None:
+            payload = ac.direction_plan
+            if args.fmt == "json":
+                text = payload.to_json()
+            elif args.fmt == "both":
+                text = payload.to_markdown() + "\n\n```json\n" + payload.to_json() + "\n```\n"
+            else:
+                text = payload.to_markdown()
         else:
-            text = gres.to_markdown()
+            if args.fmt == "json":
+                text = gres.to_json()
+            elif args.fmt == "both":
+                text = gres.to_markdown() + "\n\n```json\n" + gres.to_json() + "\n```\n"
+            else:
+                text = gres.to_markdown()
+        _emit(text, args.out)
+        return 0
+
+    if args.command == "direct":
+        ac = _load_ac(args)
+        ac.impute(method=args.impute)
+        backends = _parse_guides(args.guides) or [
+            "llmintent",
+            "retracement",
+            "kineteq_pivot",
+            "rule",
+        ]
+        plan = ac.direct(
+            text=args.text,
+            backends=backends,
+            use_slm=args.slm,
+            second_pass=not args.no_second_pass,
+        )
+        if args.fmt == "json":
+            text = plan.to_json()
+        elif args.fmt == "both":
+            text = plan.to_markdown() + "\n\n```json\n" + plan.to_json() + "\n```\n"
+        else:
+            text = plan.to_markdown()
         _emit(text, args.out)
         return 0
 
@@ -375,6 +555,98 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(tool_catalog(), indent=2))
         return 0
 
+    if args.command == "physics":
+        from autocausal.physics import PhysicsCausalSuite
+
+        if args.physics_cmd == "loop":
+            ac = _load_ac(args)
+            suite = PhysicsCausalSuite.from_autocausal(ac, system=args.system)
+            result = suite.loop(
+                horizon=args.horizon,
+                text=args.text,
+                domain=args.domain,
+                use_slm=args.slm,
+                second_pass=not args.no_second_pass,
+                use_web_ground=args.web_ground,
+                impute_method=args.impute,
+            )
+            if args.fmt == "json":
+                text = result.to_json()
+            elif args.fmt == "both":
+                text = result.to_markdown() + "\n\n```json\n" + result.to_json() + "\n```\n"
+            else:
+                text = result.to_markdown()
+            _emit(text, args.out)
+            return 0
+        if args.physics_cmd == "rollout":
+            ac = _load_ac(args)
+            suite = PhysicsCausalSuite.from_autocausal(ac, system=args.system)
+            if args.discover:
+                ac.impute(method=args.impute)
+                ac.discover()
+            traj = suite.rollout(horizon=args.horizon, use_edges=bool(args.discover))
+            if args.fmt == "json":
+                text = traj.to_json()
+            elif args.fmt == "both":
+                text = traj.to_markdown() + "\n\n```json\n" + traj.to_json() + "\n```\n"
+            else:
+                text = traj.to_markdown()
+            _emit(text, args.out)
+            return 0
+        parser.parse_args(["physics", "--help"])
+        return 0
+
+    if args.command == "ml":
+        if args.ml_cmd == "loop":
+            from autocausal.ml import KPIMinedCausalLoop
+
+            ac = _load_ac(args)
+            guides = _parse_guides(args.guides) or ["rule"]
+            # map slm alias
+            guides = ["huggingface" if g == "slm" else g for g in guides]
+            loop = KPIMinedCausalLoop.from_autocausal(ac)
+            result = loop.run(
+                text=args.text or "",
+                use_slm=bool(args.slm) or "huggingface" in guides,
+                use_torch=True if args.torch else None,
+                guides=guides,
+                horizon=args.horizon,
+                physics=not args.no_physics,
+                epochs=args.epochs,
+            )
+            if args.fmt == "json":
+                text = result.to_json()
+            elif args.fmt == "both":
+                text = result.to_markdown() + "\n\n```json\n" + result.to_json() + "\n```\n"
+            else:
+                text = result.to_markdown()
+            _emit(text, args.out)
+            return 0
+        if args.ml_cmd == "fit-imputer":
+            from autocausal.ml.imputers import apply_imputer
+
+            ac = _load_ac(args)
+            backend = args.backend
+            kind_map = {
+                "torch": "torch_mlp",
+                "torch_mlp": "torch_mlp",
+                "sklearn": "iterative",
+                "iterative": "iterative",
+                "median": "median",
+            }
+            kind = kind_map.get(backend, "median")
+            _out, _meta, fit = apply_imputer(ac.df, kind, epochs=args.epochs)  # type: ignore[arg-type]
+            if args.fmt == "json":
+                text = fit.to_json()
+            elif args.fmt == "both":
+                text = fit.to_markdown() + "\n\n```json\n" + fit.to_json() + "\n```\n"
+            else:
+                text = fit.to_markdown()
+            _emit(text, args.out)
+            return 0
+        parser.parse_args(["ml", "--help"])
+        return 0
+
     if args.command == "auto":
         join_on = args.join_on.split(",") if args.join_on else None
         path = args.csv or args.parquet or args.db
@@ -386,11 +658,15 @@ def main(argv: list[str] | None = None) -> int:
             query=args.query,
             text=args.text,
             use_slm=args.slm,
+            guide_backends=_parse_guides(args.guides),
             join=args.join,
             join_on=join_on,
             use_web_ground=args.web_ground,
             impute_method=args.impute,
             second_pass=not args.no_second_pass,
+            physics=bool(getattr(args, "physics", False)),
+            physics_horizon=getattr(args, "horizon", 5),
+            physics_system=getattr(args, "physics_system", "damped_oscillator"),
         )
         if args.fmt == "json":
             text = result.to_json()

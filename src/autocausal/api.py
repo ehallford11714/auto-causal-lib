@@ -32,9 +32,11 @@ class AutoCausal:
         self.result: Optional[DiscoveryResult] = None
         self.mining: Any = None
         self.guide_result: Any = None
+        self.direction_plan: Any = None
         self.creation_result: Any = None
         self.inference_result: Any = None
         self.grounding: Any = None
+        self.physics_result: Any = None
         self.join_log: list[dict[str, Any]] = []
         self.roles: dict[str, ColumnRole] = infer_column_roles(self._df)
 
@@ -158,16 +160,8 @@ class AutoCausal:
         self.result = result
         return result
 
-    def guide(
-        self,
-        *,
-        text: Optional[str] = None,
-        use_slm: bool = False,
-        model_name: Optional[str] = None,
-    ) -> Any:
-        from autocausal.slm import guide_pipeline
-
-        context: dict[str, Any] = {
+    def _guide_context(self, text: Optional[str] = None) -> dict[str, Any]:
+        return {
             "text": text or "",
             "columns": (
                 self.mining.columns
@@ -178,10 +172,85 @@ class AutoCausal:
             "edges": self.result.edges if self.result is not None else [],
             "candidates": self.result.candidates if self.result is not None else {},
         }
-        self.guide_result = guide_pipeline(context, use_slm=use_slm, model_name=model_name)
+
+    def guide(
+        self,
+        *,
+        text: Optional[str] = None,
+        use_slm: bool = False,
+        model_name: Optional[str] = None,
+        backends: Optional[list[str]] = None,
+    ) -> Any:
+        """Run guide backends; multi-backend when ``backends`` is set."""
+        context = self._guide_context(text)
+        if backends:
+            from autocausal.guides import direct
+
+            plan = direct(
+                context, backends=backends, use_slm=use_slm, model_name=model_name
+            )
+            self.direction_plan = plan
+            self.guide_result = plan.as_guide_result()
+        else:
+            from autocausal.slm import guide_pipeline
+
+            self.guide_result = guide_pipeline(
+                context, use_slm=use_slm, model_name=model_name
+            )
         if self.result is not None:
             self.result.guide = self.guide_result.to_dict()
+            if self.direction_plan is not None:
+                self.result.guide["direction_plan"] = self.direction_plan.to_dict()
         return self.guide_result
+
+    def direct(
+        self,
+        *,
+        text: Optional[str] = None,
+        backends: Optional[list[str]] = None,
+        use_slm: bool = False,
+        model_name: Optional[str] = None,
+        second_pass: bool = True,
+        **discover_kwargs: Any,
+    ) -> Any:
+        """
+        Steer causal direction with one or more guide backends.
+
+        Merges outputs into a ``DirectionPlan``, optionally re-runs discover
+        focused on plan columns (second pass).
+        """
+        from autocausal.guides import direct as run_direct
+
+        if self.mining is None:
+            self.mine()
+        if self.imputation is None and self._df.isna().any().any():
+            self.impute(method="auto")
+        if self.result is None:
+            self.discover(**discover_kwargs)
+
+        names = backends or ["llmintent", "retracement", "kineteq_pivot", "rule"]
+        plan = run_direct(
+            self._guide_context(text),
+            backends=names,
+            use_slm=use_slm,
+            model_name=model_name,
+        )
+        self.direction_plan = plan
+        self.guide_result = plan.as_guide_result()
+        if self.result is not None:
+            self.result.guide = self.guide_result.to_dict()
+            self.result.guide["direction_plan"] = plan.to_dict()
+
+        if second_pass and plan.focus_columns:
+            focus = [c for c in plan.focus_columns if c in self._df.columns]
+            if len(focus) >= 2:
+                self.discover(focus_columns=focus, **discover_kwargs)
+                # refresh plan notes after second pass
+                plan.notes = list(plan.notes) + [f"second-pass focus: {focus[:12]}"]
+                if self.result is not None:
+                    self.result.guide = self.guide_result.to_dict()
+                    self.result.guide["direction_plan"] = plan.to_dict()
+        return plan
 
     def create(
         self,
@@ -281,6 +350,66 @@ class AutoCausal:
             self.result.grounding = self.grounding.to_dict()
         return self.grounding
 
+    def physics_loop(
+        self,
+        *,
+        horizon: int = 5,
+        text: Optional[str] = None,
+        domain: Union[str, list[str]] = "auto",
+        system: str = "damped_oscillator",
+        use_slm: bool = False,
+        second_pass: bool = True,
+        use_web_ground: bool = False,
+        impute_method: ImputeMethod = "auto",
+        **discover_kwargs: Any,
+    ) -> Any:
+        """Run autocausal physics suite: mine → discover → rollout → physical ground → guide."""
+        from autocausal.physics import PhysicsCausalSuite
+
+        suite = PhysicsCausalSuite.from_autocausal(
+            self,
+            system=system,  # type: ignore[arg-type]
+            prefer_nfs=True,
+        )
+        result = suite.loop(
+            horizon=horizon,
+            text=text,
+            domain=domain,
+            use_slm=use_slm,
+            second_pass=second_pass,
+            use_web_ground=use_web_ground,
+            impute_method=impute_method,
+            **discover_kwargs,
+        )
+        self.physics_result = result
+        # keep shared state in sync (suite mutates the same AutoCausal)
+        return result
+
+    def ml_loop(
+        self,
+        *,
+        text: str = "",
+        use_slm: bool = False,
+        use_torch: Optional[bool] = None,
+        guides: Optional[list[str]] = None,
+        horizon: int = 5,
+        physics: bool = True,
+        **kwargs: Any,
+    ) -> Any:
+        """KPI-mined loop: mine → SLM ModelConstructPlan → impute → discover → FitReport."""
+        from autocausal.ml import KPIMinedCausalLoop
+
+        loop = KPIMinedCausalLoop.from_autocausal(self)
+        return loop.run(
+            text=text,
+            use_slm=use_slm,
+            use_torch=use_torch,
+            guides=guides,
+            horizon=horizon,
+            physics=physics,
+            **kwargs,
+        )
+
     def report(self, *, as_markdown: bool = True) -> str:
         if self.result is None:
             self.discover()
@@ -307,14 +436,19 @@ class AutoCausal:
         query: Optional[str] = None,
         text: Optional[str] = None,
         use_slm: bool = False,
+        guide_backends: Optional[list[str]] = None,
         join: Optional[Union[str, list[str]]] = None,
         join_on: Optional[Union[str, list[str]]] = None,
         use_web_ground: bool = False,
         impute_method: ImputeMethod = "auto",
         second_pass: bool = True,
+        physics: bool = False,
+        physics_horizon: int = 5,
+        physics_system: str = "damped_oscillator",
+        physics_domain: Union[str, list[str]] = "auto",
         **discover_kwargs: Any,
     ) -> AutoResult:
-        """Orchestrated flow: load → ping? → join? → mine → impute → discover → guide → ground."""
+        """Orchestrated flow: load → ping? → join? → mine → impute → discover → guide → ground [→ physics]."""
         from autocausal.db import ping
         from autocausal.ingest import dialect_from_url
 
@@ -343,25 +477,83 @@ class AutoCausal:
             ac.join_public(join, on=join_on, allow_network=False)
             notes.append(f"joined public: {join}")
 
+        physics_payload: Optional[dict[str, Any]] = None
+        if physics:
+            # Dedicated physics loop owns mine/impute/discover/rollout/ground/guide
+            phys = ac.physics_loop(
+                horizon=physics_horizon,
+                text=text,
+                domain=physics_domain,
+                system=physics_system,
+                use_slm=use_slm,
+                second_pass=second_pass,
+                use_web_ground=use_web_ground,
+                impute_method=impute_method,
+                **discover_kwargs,
+            )
+            physics_payload = phys.to_dict()
+            notes.extend(list(phys.notes or []))
+            notes.append(f"physics=True horizon={physics_horizon} system={physics_system}")
+            mining = ac.mining
+            result = ac.result
+            assert result is not None
+            guide = ac.guide_result
+            grounding = ac.grounding
+            direction = (
+                ac.direction_plan.to_dict()
+                if ac.direction_plan is not None and hasattr(ac.direction_plan, "to_dict")
+                else None
+            )
+            return AutoResult(
+                discovery=result,
+                mining=mining.to_dict() if mining is not None and hasattr(mining, "to_dict") else mining,
+                guide=guide.to_dict() if guide is not None else None,
+                direction_plan=direction,
+                grounding=grounding.to_dict() if grounding is not None else None,
+                physics=physics_payload,
+                join_log=list(ac.join_log),
+                ping=ping_info.to_dict() if ping_info is not None else None,
+                source=ac.source,
+                notes=notes,
+            )
+
         ac.mine()
         mining = ac.mining
         ac.impute(method=impute_method)
         result = ac.discover(**discover_kwargs)
-        guide = ac.guide(text=text, use_slm=use_slm)
 
-        if second_pass and guide.focus_columns:
-            focus = [c for c in guide.focus_columns if c in ac.df.columns]
-            if len(focus) >= 2:
-                notes.append(f"second-pass focus: {focus[:12]}")
-                result = ac.discover(focus_columns=focus, **discover_kwargs)
-                guide = ac.guide(text=text, use_slm=use_slm)
+        if guide_backends:
+            plan = ac.direct(
+                text=text,
+                backends=guide_backends,
+                use_slm=use_slm,
+                second_pass=second_pass,
+                **discover_kwargs,
+            )
+            guide = ac.guide_result
+            notes.append(f"guide_backends={guide_backends}")
+            if plan.focus_columns:
+                notes.append(f"direction focus: {plan.focus_columns[:12]}")
+            result = ac.result or result
+            direction = plan.to_dict()
+        else:
+            guide = ac.guide(text=text, use_slm=use_slm)
+            direction = None
+            if second_pass and guide.focus_columns:
+                focus = [c for c in guide.focus_columns if c in ac.df.columns]
+                if len(focus) >= 2:
+                    notes.append(f"second-pass focus: {focus[:12]}")
+                    result = ac.discover(focus_columns=focus, **discover_kwargs)
+                    guide = ac.guide(text=text, use_slm=use_slm)
 
         grounding = ac.ground(use_web=use_web_ground)
         auto_result = AutoResult(
             discovery=result,
             mining=mining.to_dict() if mining is not None and hasattr(mining, "to_dict") else mining,
             guide=guide.to_dict() if guide is not None else None,
+            direction_plan=direction,
             grounding=grounding.to_dict() if grounding is not None else None,
+            physics=physics_payload,
             join_log=list(ac.join_log),
             ping=ping_info.to_dict() if ping_info is not None else None,
             source=ac.source,

@@ -39,6 +39,8 @@ def test_cli_module_help():
     assert "public" in proc.stdout
     assert "guide" in proc.stdout
     assert "auto" in proc.stdout
+    assert "ml" in proc.stdout
+    assert "physics" in proc.stdout
 
 
 def test_dialect_matrix_nonempty():

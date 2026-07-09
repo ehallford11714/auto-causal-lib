@@ -61,7 +61,9 @@ class AutoResult:
     discovery: DiscoveryResult
     mining: Optional[dict[str, Any]] = None
     guide: Optional[dict[str, Any]] = None
+    direction_plan: Optional[dict[str, Any]] = None
     grounding: Optional[dict[str, Any]] = None
+    physics: Optional[dict[str, Any]] = None
     join_log: list[dict[str, Any]] = field(default_factory=list)
     ping: Optional[dict[str, Any]] = None
     source: str = ""
@@ -75,7 +77,9 @@ class AutoResult:
             "mining": self.mining,
             "discovery": self.discovery.to_dict(),
             "guide": self.guide,
+            "direction_plan": self.direction_plan,
             "grounding": self.grounding,
+            "physics": self.physics,
             "notes": self.notes,
         }
 

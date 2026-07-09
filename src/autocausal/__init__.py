@@ -16,6 +16,10 @@ __all__ = [
     "list_tools",
     "validate_pipeline",
     "slm_status",
+    "list_guides",
+    "direct",
+    "KPIMinedCausalLoop",
+    "ModelConstructPlan",
 ]
 
 
@@ -28,4 +32,12 @@ def __getattr__(name: str):
         from autocausal import suite_tools as _st
 
         return getattr(_st, name)
+    if name in ("list_guides", "direct"):
+        from autocausal import guides as _guides
+
+        return getattr(_guides, name)
+    if name in ("KPIMinedCausalLoop", "ModelConstructPlan", "FitReport", "construct_model_plan"):
+        from autocausal import ml as _ml
+
+        return getattr(_ml, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")
