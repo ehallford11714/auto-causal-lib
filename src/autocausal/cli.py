@@ -293,6 +293,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ml_fit.add_argument("-o", "--out", type=str, default=None)
 
+    # isolates-causal — soft IntentIsolates layer IV bridge
+    ic = sub.add_parser(
+        "isolates-causal",
+        help="Layer motifs → indication vs IV (requires intentisolates)",
+    )
+    ic.add_argument("--text", type=str, required=True, help="Input text")
+    ic.add_argument("--outcome-hint", type=str, default=None, dest="outcome_hint")
+    ic.add_argument("--n-bootstrap", type=int, default=48, dest="n_bootstrap")
+    ic.add_argument("--seed", type=int, default=17)
+    ic.add_argument("--mock-iv", action="store_true", dest="mock_iv")
+    ic.add_argument("--backend", type=str, default="rule")
+    ic.add_argument(
+        "--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt"
+    )
+    ic.add_argument("-o", "--out", type=str, default=None)
+
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
 
@@ -672,6 +688,33 @@ def main(argv: list[str] | None = None) -> int:
             text = result.to_json()
         elif args.fmt == "both":
             text = result.to_markdown() + "\n\n```json\n" + result.to_json() + "\n```\n"
+        else:
+            text = result.to_markdown()
+        _emit(text, args.out)
+        return 0
+
+    if args.command == "isolates-causal":
+        try:
+            from autocausal.isolates_bridge import run_isolates_causal
+        except ImportError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        try:
+            result = run_isolates_causal(
+                args.text,
+                outcome_hint=args.outcome_hint,
+                mock_iv=bool(args.mock_iv),
+                n_bootstrap=args.n_bootstrap,
+                seed=args.seed,
+                backend=args.backend,
+            )
+        except ImportError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        if args.fmt == "json":
+            text = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
+        elif args.fmt == "both":
+            text = result.to_markdown() + "\n\n```json\n" + json.dumps(result.to_dict(), indent=2) + "\n```\n"
         else:
             text = result.to_markdown()
         _emit(text, args.out)

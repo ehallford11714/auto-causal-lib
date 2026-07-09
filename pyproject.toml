@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autocausal"
-version = "0.5.0"
+version = "0.5.1"
 description = "Auto-impute, mine, discover, KPI ML loops (SLM→PyTorch), physics predictive loop, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -56,6 +56,7 @@ nlp-full = ["autocausal[nlp]", "spacy>=3.7"]
 causal-extra = ["dowhy>=0.11", "econml>=0.15"]
 web = ["httpx>=0.27"]
 suite = ["autocausal[nlp,slm,web,ml]"]
+isolates = []  # pip install intentisolates — see autocausal.isolates_bridge
 all-drivers = [
   "autocausal[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,databricks,synapse,parquet]",
 ]
