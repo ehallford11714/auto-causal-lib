@@ -3,7 +3,29 @@
 from __future__ import annotations
 
 from autocausal.api import AutoCausal
-from autocausal.results import DiscoveryResult
+from autocausal.results import AutoResult, DiscoveryResult
 from autocausal.__version__ import __version__
 
-__all__ = ["AutoCausal", "DiscoveryResult", "__version__"]
+__all__ = [
+    "AutoCausal",
+    "DiscoveryResult",
+    "AutoResult",
+    "__version__",
+    "create_from_context",
+    "infer_from_results",
+    "list_tools",
+    "validate_pipeline",
+    "slm_status",
+]
+
+
+def __getattr__(name: str):
+    if name in ("create_from_context", "infer_from_results", "slm_status"):
+        from autocausal import slm as _slm
+
+        return getattr(_slm, name)
+    if name in ("list_tools", "validate_pipeline"):
+        from autocausal import suite_tools as _st
+
+        return getattr(_st, name)
+    raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

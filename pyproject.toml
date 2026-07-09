@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autocausal"
-version = "0.1.0"
-description = "Auto-impute tabular fields and discover exploratory causal relationships from CSV and SQL databases."
+version = "0.2.0"
+description = "Auto-impute, mine, discover, guide, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "AutoCausalLib" }]
-keywords = ["causal", "imputation", "discovery", "sqlalchemy", "tabular"]
+keywords = ["causal", "imputation", "discovery", "sqlalchemy", "tabular", "mining"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -26,6 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pyarrow>=14.0"]
+datamine = []  # pip install -e ../DataMineLib — see autocausal.datamine_adapter
 parquet = ["pyarrow>=14.0"]
 postgres = ["psycopg2-binary>=2.9"]
 vertica = ["vertica-python>=1.3"]
@@ -41,9 +42,19 @@ cockroachdb = ["psycopg2-binary>=2.9"]
 trino = ["trino>=0.328"]
 presto = ["pyhive[presto]>=0.7"]
 clickhouse = ["clickhouse-sqlalchemy>=0.3"]
+databricks = ["databricks-sqlalchemy>=1.0"]
+synapse = ["pyodbc>=5.0"]
+firebird = ["sqlalchemy-firebird>=0.8"]
+hana = ["sqlalchemy-hana>=0.5"]
 sqlite = []
+slm = ["torch>=2.0", "transformers>=4.36"]
+nlp = ["nltk>=3.8", "gensim>=4.3"]
+nlp-full = ["autocausal[nlp]", "spacy>=3.7"]
+causal-extra = ["dowhy>=0.11", "econml>=0.15"]
+web = ["httpx>=0.27"]
+suite = ["autocausal[nlp,slm,web]"]
 all-drivers = [
-  "autocausal[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,parquet]",
+  "autocausal[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,databricks,synapse,parquet]",
 ]
 
 [project.scripts]
@@ -55,6 +66,9 @@ Documentation = "docs/CONNECTIONS.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+autocausal = ["data/**/*", "data/public/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

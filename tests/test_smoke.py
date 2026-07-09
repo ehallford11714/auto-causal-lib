@@ -34,6 +34,11 @@ def test_cli_module_help():
     )
     assert proc.returncode == 0
     assert "discover" in proc.stdout
+    assert "mine" in proc.stdout
+    assert "ping" in proc.stdout
+    assert "public" in proc.stdout
+    assert "guide" in proc.stdout
+    assert "auto" in proc.stdout
 
 
 def test_dialect_matrix_nonempty():

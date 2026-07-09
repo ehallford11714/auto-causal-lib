@@ -7,6 +7,34 @@ Only `sqlalchemy` is a hard dependency. Install dialect drivers as **optional ex
 pip install 'autocausal[postgres]'
 pip install 'autocausal[vertica]'
 python -m autocausal dialects   # dump JSON matrix
+python -m autocausal ping --url "sqlite:///:memory:"
+python -m autocausal ping --public --no-network
+```
+
+## Unified connect / ping / helpers
+
+```python
+from autocausal.db import connect, ping, list_tables, sample_table, profile_table
+
+h = connect("sqlite:///./demo.db")
+# or kwargs:
+# h = connect(dialect="postgresql+psycopg2", user="u", password="p",
+#             host="localhost", port=5432, database="db")
+
+print(h.list_tables())
+print(sample_table(h.url, "events", n=50).head())
+print(profile_table(h.url, "events"))
+
+r = ping("sqlite:///:memory:")
+assert r.ok and r.latency_ms >= 0
+```
+
+Public / bundled health checks (never hang; network soft-fails):
+
+```bash
+python -m autocausal ping --public
+python -m autocausal ping --public --no-network
+# optional: set AUTOCAUSAL_PUBLIC_PG_URL for a read-only demo Postgres ping
 ```
 
 ## First-class targets
@@ -73,19 +101,22 @@ Drivers are **not** all installed by default. Rows marked *bundled extra* ship a
 | **trino** | `trino://u@h:8080/catalog/schema` | `trino` | `trino` | Prefer over Presto |
 | **presto** | `presto://u@h:8080/catalog/schema` | `presto` | `pyhive[presto]` | Legacy PrestoDB |
 | **clickhouse** | `clickhouse+native://u:p@h:9000/db` | `clickhouse` | `clickhouse-sqlalchemy` | Also `+http` |
-| **firebird** | `firebird://u:p@h:3050/db` | — | `sqlalchemy-firebird` / `fdb` | Community |
+| **databricks** | `databricks://token:TOKEN@host?http_path=...` | `databricks` | `databricks-sqlalchemy` | External |
+| **synapse** | `mssql+pyodbc://...database.windows.net/...` | `synapse` | `pyodbc` | Azure Synapse / SQL |
+| **firebird** | `firebird+fdb://u:p@h:3050/db` | `firebird` | `sqlalchemy-firebird` / `fdb` | Optional driver |
+| **sap hana** | `hana://u:p@h:30015` | `hana` | `sqlalchemy-hana` | Optional driver |
 | **sybase** | `sybase+pyodbc://...` | — | `pyodbc` | Legacy |
-| **databricks** | `databricks://token:TOKEN@host?http_path=...` | — | `databricks-sqlalchemy` | External |
 | **athena** | `awsathena+rest://:@region/db?s3_staging_dir=s3://...` | — | `pyathena[sqlalchemy]` | External |
 | **hive** | `hive://u@h:10000/db` | — | `pyhive[hive]` | External |
 | **impala** | `impala://h:21050/db` | — | `impyla` | External |
 | **cratedb** | `crate://u:p@h:4200/` | — | `crate[sqlalchemy]` | External |
-| **sap hana** | `hana://u:p@h:30015` | — | `sqlalchemy-hana` | External |
 
 ### Convenience extras
 
 ```text
 autocausal[parquet]       # pyarrow for Parquet ingest
+autocausal[slm]           # torch + transformers for HF guide
+autocausal[web]           # httpx for optional web grounding
 autocausal[all-drivers]   # attempts to pull bundled dialect extras
 autocausal[dev]           # pytest + pyarrow
 ```
@@ -94,6 +125,7 @@ autocausal[dev]           # pytest + pyarrow
 
 ```python
 from autocausal.ingest import dialect_from_url, DIALECT_MATRIX, load_sqlalchemy
+from autocausal.db import connect, ping, list_tables, sample_table, profile_table
 
 dialect_from_url("postgresql+psycopg2://localhost/db")  # -> "postgresql"
 ```
@@ -104,3 +136,4 @@ dialect_from_url("postgresql+psycopg2://localhost/db")  # -> "postgresql"
 
 - Prefer env vars / secret stores for credentials; do not commit URLs with passwords.
 - `table` / `schema` identifiers are restricted to alphanumeric + underscore when auto-quoted.
+- Public ping never ships secrets; optional Postgres uses `AUTOCAUSAL_PUBLIC_PG_URL` only.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autocausal.api import DiscoveryResult
+    from autocausal.results import AutoResult, DiscoveryResult
 
 
 def render_markdown_report(result: "DiscoveryResult") -> str:
@@ -65,6 +65,26 @@ def render_markdown_report(result: "DiscoveryResult") -> str:
             )
     lines.append("")
 
+    if result.guide:
+        lines.append("## Guide")
+        lines.append("")
+        lines.append(f"- Backend: `{result.guide.get('backend', '')}`")
+        focus = result.guide.get("focus_columns") or []
+        if focus:
+            lines.append("- Focus: " + ", ".join(f"`{c}`" for c in focus[:12]))
+        lines.append("")
+
+    if result.grounding:
+        lines.append("## Grounding")
+        lines.append("")
+        claims = result.grounding.get("claims") or []
+        for c in claims[:15]:
+            lines.append(
+                f"- `{c.get('source')}` → `{c.get('target')}`: "
+                f"**{c.get('label')}** (conf={c.get('confidence')})"
+            )
+        lines.append("")
+
     if result.notes:
         lines.append("## Notes")
         lines.append("")
@@ -79,4 +99,42 @@ def render_markdown_report(result: "DiscoveryResult") -> str:
         f"Edges: {len(result.graph.get('edges', []))}"
     )
     lines.append("")
+    return "\n".join(lines)
+
+
+def render_auto_markdown(result: "AutoResult") -> str:
+    lines: list[str] = ["# AutoCausal auto report", ""]
+    lines.append(f"**Source:** `{result.source}`")
+    lines.append("")
+    if result.ping:
+        lines.append(
+            f"- Ping: ok={result.ping.get('ok')} "
+            f"latency_ms={result.ping.get('latency_ms')} "
+            f"url={result.ping.get('url_safe')}"
+        )
+        lines.append("")
+    if result.join_log:
+        lines.append("## Public joins")
+        lines.append("")
+        for j in result.join_log:
+            lines.append(f"- `{j}`")
+        lines.append("")
+    if result.mining:
+        lines.append("## Mining summary")
+        lines.append("")
+        lines.append(f"- Associations: {len(result.mining.get('associations') or [])}")
+        lines.append(f"- KPIs: {result.mining.get('kpis')}")
+        lines.append("")
+    lines.append(render_markdown_report(result.discovery))
+    if result.guide and not result.discovery.guide:
+        lines.append("## Guide (auto)")
+        lines.append("")
+        lines.append(f"- Backend: `{result.guide.get('backend')}`")
+        lines.append("")
+    if result.notes:
+        lines.append("## Pipeline notes")
+        lines.append("")
+        for n in result.notes:
+            lines.append(f"- {n}")
+        lines.append("")
     return "\n".join(lines)

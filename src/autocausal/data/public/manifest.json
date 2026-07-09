@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "description": "AutoCausalLib public / demo dataset suite",
+  "sources": [
+    {
+      "id": "finance_demo",
+      "name": "Finance returns stub",
+      "domain": "finance",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture (not real market data).",
+      "description": "Synthetic daily returns, rates, volume, default flag by region/ticker.",
+      "path": "finance_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "date",
+          "dtype": "str"
+        },
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "ticker",
+          "dtype": "str"
+        },
+        {
+          "column": "return",
+          "dtype": "float"
+        },
+        {
+          "column": "interest_rate",
+          "dtype": "float"
+        },
+        {
+          "column": "volume",
+          "dtype": "float"
+        },
+        {
+          "column": "default_flag",
+          "dtype": "int"
+        }
+      ],
+      "suggested_join_keys": [
+        "region",
+        "date"
+      ],
+      "rows_approx": 120,
+      "offline": true
+    },
+    {
+      "id": "marketing_demo",
+      "name": "Marketing campaign panel",
+      "domain": "marketing",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture.",
+      "description": "User-level campaign exposure, CTR, conversion, spend, revenue.",
+      "path": "marketing_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "user_id",
+          "dtype": "str"
+        },
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "campaign",
+          "dtype": "str"
+        },
+        {
+          "column": "treatment",
+          "dtype": "int"
+        },
+        {
+          "column": "ctr",
+          "dtype": "float"
+        },
+        {
+          "column": "conversion",
+          "dtype": "int"
+        },
+        {
+          "column": "spend",
+          "dtype": "float"
+        },
+        {
+          "column": "revenue",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "user_id",
+        "region"
+      ],
+      "rows_approx": 100,
+      "offline": true
+    },
+    {
+      "id": "policy_demo",
+      "name": "Policy DiD panel",
+      "domain": "policy",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture.",
+      "description": "Unit-year panel with post \u00d7 treated_unit design and outcomes.",
+      "path": "policy_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "unit_id",
+          "dtype": "str"
+        },
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "year",
+          "dtype": "int"
+        },
+        {
+          "column": "treatment",
+          "dtype": "int"
+        },
+        {
+          "column": "outcome",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "region",
+        "year",
+        "unit_id"
+      ],
+      "rows_approx": 96,
+      "offline": true
+    },
+    {
+      "id": "demographics_demo",
+      "name": "Demographics by region",
+      "domain": "demographics",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture (illustrative numbers).",
+      "description": "Region-level age, income, urbanization, population.",
+      "path": "demographics_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "median_age",
+          "dtype": "float"
+        },
+        {
+          "column": "median_income",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "region"
+      ],
+      "rows_approx": 5,
+      "offline": true
+    },
+    {
+      "id": "vision_stub",
+      "name": "Vision / motion stub",
+      "domain": "vision",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture.",
+      "description": "Clip/frame motion and object counts for NextFrameSeq-style joins.",
+      "path": "vision_stub.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "clip_id",
+          "dtype": "str"
+        },
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "motion_score",
+          "dtype": "float"
+        },
+        {
+          "column": "object_count",
+          "dtype": "int"
+        }
+      ],
+      "suggested_join_keys": [
+        "region",
+        "clip_id"
+      ],
+      "rows_approx": 60,
+      "offline": true
+    },
+    {
+      "id": "instruments_demo",
+      "name": "IV assignment table",
+      "domain": "policy",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture.",
+      "description": "Instrument Z, assignment, eligibility by user/region for IV joins.",
+      "path": "instruments_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "user_id",
+          "dtype": "str"
+        },
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "instrument_z",
+          "dtype": "float"
+        },
+        {
+          "column": "assignment",
+          "dtype": "int"
+        }
+      ],
+      "suggested_join_keys": [
+        "user_id",
+        "region"
+      ],
+      "rows_approx": 80,
+      "offline": true
+    },
+    {
+      "id": "iris_open",
+      "name": "Iris (open CSV mirror)",
+      "domain": "demo",
+      "access": "download",
+      "license_note": "Classic UCI Iris; public domain / open educational use.",
+      "description": "Optional network download of Iris CSV for soft-fail demos.",
+      "path": null,
+      "url": "https://raw.githubusercontent.com/plotly/datasets/master/iris.csv",
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "sepal_length",
+          "dtype": "float"
+        },
+        {
+          "column": "species",
+          "dtype": "str"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 150,
+      "offline": false
+    },
+    {
+      "id": "public_pg_env",
+      "name": "Optional public Postgres (env URL)",
+      "domain": "sql_demo",
+      "access": "sql_demo",
+      "license_note": "User-supplied read-only demo URL only; nothing hardcoded.",
+      "description": "Ping/load via AUTOCAUSAL_PUBLIC_PG_URL if set. Prefer bundled fixtures.",
+      "path": null,
+      "url": null,
+      "sql_url_env": "AUTOCAUSAL_PUBLIC_PG_URL",
+      "table": null,
+      "schema_summary": [],
+      "suggested_join_keys": [],
+      "rows_approx": 0,
+      "offline": false
+    }
+  ]
+}

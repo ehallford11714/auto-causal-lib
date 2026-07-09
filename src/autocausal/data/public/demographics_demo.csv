@@ -1,0 +1,6 @@
+region,median_age,median_income,urban_pct,population_m
+US,38.5,65000,82.0,330.0
+EU,43.0,42000,75.0,450.0
+APAC,32.0,28000,51.0,2800.0
+LATAM,29.5,18000,80.0,650.0
+MEA,26.0,12000,48.0,400.0

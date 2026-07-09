@@ -80,10 +80,16 @@ def load_sqlalchemy(
 
 
 def dialect_from_url(url: str) -> str:
-    """Return SQLAlchemy dialect name from a URL (e.g. postgresql, vertica)."""
+    """Return SQLAlchemy dialect name from a URL (e.g. postgresql, vertica).
+
+    Parses manually first: urllib rejects schemes with underscores
+    (e.g. ``vertica+vertica_python://...``).
+    """
     # sqlalchemy URLs: dialect+driver://...
-    parsed = urlparse(url)
-    scheme = parsed.scheme or ""
+    if "://" in url:
+        scheme = url.split("://", 1)[0]
+    else:
+        scheme = urlparse(url).scheme or ""
     return scheme.split("+", 1)[0].lower() if scheme else ""
 
 
@@ -217,13 +223,6 @@ DIALECT_MATRIX: list[dict[str, Any]] = [
         "notes": "Alternative to pyodbc.",
     },
     {
-        "dialect": "firebird",
-        "url": "firebird://user:pass@host:3050/db",
-        "extra": None,
-        "pip": "sqlalchemy-firebird / fdb",
-        "notes": "Community dialect; not bundled as an extra.",
-    },
-    {
         "dialect": "sybase",
         "url": "sybase+pyodbc://...",
         "extra": None,
@@ -233,9 +232,16 @@ DIALECT_MATRIX: list[dict[str, Any]] = [
     {
         "dialect": "databricks",
         "url": "databricks://token:TOKEN@host?http_path=/sql/1.0/warehouses/...",
-        "extra": None,
+        "extra": "databricks",
         "pip": "databricks-sqlalchemy / sqlalchemy-databricks",
         "notes": "External dialect package.",
+    },
+    {
+        "dialect": "synapse / mssql azure",
+        "url": "mssql+pyodbc://user:pass@server.database.windows.net/db?driver=ODBC+Driver+18+for+SQL+Server",
+        "extra": "synapse",
+        "pip": "pyodbc",
+        "notes": "Azure Synapse / SQL via mssql+pyodbc.",
     },
     {
         "dialect": "athena",
@@ -268,8 +274,15 @@ DIALECT_MATRIX: list[dict[str, Any]] = [
     {
         "dialect": "sap hana",
         "url": "hana://user:pass@host:30015",
-        "extra": None,
+        "extra": "hana",
         "pip": "sqlalchemy-hana",
-        "notes": "External dialect package.",
+        "notes": "External dialect package; driver optional.",
+    },
+    {
+        "dialect": "firebird",
+        "url": "firebird+fdb://user:pass@host:3050/db",
+        "extra": "firebird",
+        "pip": "sqlalchemy-firebird / fdb",
+        "notes": "Documented even if driver optional.",
     },
 ]
