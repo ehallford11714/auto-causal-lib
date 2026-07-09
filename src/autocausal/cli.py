@@ -1,4 +1,4 @@
-"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public ..."""
+"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public|physics|ml ..."""
 
 from __future__ import annotations
 
@@ -217,6 +217,22 @@ def _build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     pr.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
     pr.add_argument("-o", "--out", type=str, default=None)
+    pui = phys_sub.add_parser(
+        "ui",
+        help="Launch Streamlit physics demo (needs autocausal[ui]; default port 8518)",
+    )
+    pui.add_argument("--port", type=int, default=8518, help="Streamlit server port (default 8518)")
+    pui.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Bind address (default 127.0.0.1)",
+    )
+    pui.add_argument(
+        "--headless",
+        action="store_true",
+        help="Do not open a browser tab",
+    )
 
     # auto
     a = sub.add_parser("auto", help="Full pipeline: join? mine impute discover guide ground")
@@ -608,6 +624,32 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 text = traj.to_markdown()
             _emit(text, args.out)
+            return 0
+        if args.physics_cmd == "ui":
+            try:
+                import streamlit.web.cli as stcli  # type: ignore
+            except ImportError:
+                print(
+                    'Streamlit not installed. Install UI extras:\n'
+                    '  pip install -e ".[ui]"\n'
+                    'Then: python -m autocausal physics ui --port 8518',
+                    file=sys.stderr,
+                )
+                return 1
+            from autocausal.apps import physics_demo_path
+
+            ui_path = physics_demo_path()
+            argv = [
+                "streamlit",
+                "run",
+                ui_path,
+                f"--server.port={int(args.port)}",
+                f"--server.address={args.host}",
+            ]
+            if args.headless:
+                argv.append("--server.headless=true")
+            sys.argv = argv
+            stcli.main()
             return 0
         parser.parse_args(["physics", "--help"])
         return 0

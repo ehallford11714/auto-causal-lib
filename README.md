@@ -17,7 +17,7 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **SLM** — `RuleBackend` always; optional HuggingFace for *creation* (questions/Z/morphemes) and *inference* (narrative/caveats)
 - **Direction guides** — soft-optional `LLMIntent` / `retracement` / Kineteq pivot embeddings → `DirectionPlan` (see [docs/GUIDES.md](docs/GUIDES.md))
 - **suite_tools** — registry of causal/NLP/KPI/validation adapters (NLTK, gensim, DoWhy stubs, …)
-- **Physics loop** — analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`
+- **Physics loop** — analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`, optional **Streamlit demo** (`physics ui`)
 - **KPI ML loop** — SLM/Rule `ModelConstructPlan` → median/sklearn/**PyTorch MLP** impute → discover → FitReport ([docs/ML_KPI_LOOP.md](docs/ML_KPI_LOOP.md))
 - **Isolates causal** — soft bridge to IntentIsolates layer motifs → indication vs IV ([docs/LAYER_CAUSAL_IV.md](docs/LAYER_CAUSAL_IV.md))
 - Markdown / JSON reports and a CLI
@@ -33,6 +33,8 @@ pip install -e ".[slm]"          # torch + transformers (lazy load)
 pip install -e ".[torch]"        # torch only (KPI MLP imputer)
 pip install -e ".[ml]"           # torch + scikit-learn
 pip install -e ".[nlp]"          # nltk + gensim
+pip install -e ".[ui]"           # Streamlit physics demo (+ plotly)
+pip install -e ".[streamlit]"    # alias for [ui]
 pip install -e ".[postgres]"
 pip install -e ".[vertica]"
 pip install -e ".[mysql,duckdb,parquet]"
@@ -116,6 +118,7 @@ python -m autocausal tools list
 python -m autocausal tools validate --csv data.csv --y y --d d --z z
 python -m autocausal physics loop --csv data.csv --horizon 5 --text "what drives outcome?"
 python -m autocausal physics rollout --csv data.csv --horizon 5
+python -m autocausal physics ui --port 8518
 python -m autocausal auto --csv data.csv --physics --horizon 5
 python -m autocausal ml loop --csv data.csv --text "what drives Y?"
 python -m autocausal ml loop --csv data.csv --torch --guides rule
@@ -124,6 +127,18 @@ python -m autocausal slm-status
 python -m autocausal guides list
 python -m autocausal auto --csv data.csv --slm
 ```
+
+### Physics Streamlit demo
+
+Interactive UI for the physics autocausal loop (trajectory charts, edges, physical insights, energy proxies). Soft-optional — core mine/discover/ml loops do not import Streamlit.
+
+```bash
+pip install -e ".[ui]"
+python -m autocausal physics ui --port 8518
+# or: streamlit run src/autocausal/apps/physics_streamlit.py --server.port 8518
+```
+
+See [docs/PHYSICS_DEMO.md](docs/PHYSICS_DEMO.md). **Caveat:** exploratory dynamics only — not true physics ID.
 
 ### PostgreSQL
 
@@ -138,6 +153,7 @@ python -m autocausal discover \
 
 - [KPI ML loop (SLM → PyTorch)](docs/ML_KPI_LOOP.md)
 - [ML Model Hub proposals](../docs/AUTOCAUSAL_ML_MODEL_HUB_PROPOSALS.md)
+- [Physics Streamlit demo](docs/PHYSICS_DEMO.md)
 - [Physics world models + autocausal loop (SOTA)](docs/SOTA_PHYSICS_WORLD_MODEL_AUTOCAUSAL.md)
 - [Direction guides](docs/GUIDES.md)
 - [Tool suite registry](docs/SUITE_TOOLS.md)
