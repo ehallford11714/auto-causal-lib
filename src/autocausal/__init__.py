@@ -32,6 +32,8 @@ __all__ = [
     "InsightReport",
     "ExperimentRecommender",
     "run_insight_loop",
+    "load_dataset",
+    "list_datasets",
 ]
 
 
@@ -75,4 +77,8 @@ def __getattr__(name: str):
         from autocausal import insight as _insight
 
         return getattr(_insight, name)
+    if name in ("load_dataset", "list_datasets", "get_dataset", "DATASET_IDS"):
+        from autocausal import datasets as _ds
+
+        return getattr(_ds, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

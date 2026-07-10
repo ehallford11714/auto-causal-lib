@@ -97,6 +97,12 @@ def register_insight_parser(sub: argparse._SubParsersAction) -> None:
 
     demo_p = ins_sub.add_parser("demo", help="Offline synthetic IV demo → insight research loop")
     demo_p.add_argument("--rounds", type=int, default=2, dest="rounds")
+    demo_p.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Bundled real example id (iris, wine, titanic, diabetes, …)",
+    )
     demo_p.add_argument("--slm", action="store_true", help="Try SLM (soft)")
     demo_p.add_argument("--no-slm", dest="slm", action="store_false")
     demo_p.set_defaults(slm=False)
@@ -141,6 +147,7 @@ def handle_insight(args: argparse.Namespace) -> int:
         report = demo_insight(
             use_slm=_use_slm(),
             max_rounds=int(getattr(args, "rounds", 2) or 2),
+            dataset=getattr(args, "dataset", None),
         )
         out = getattr(args, "out", None)
         text = _format(report, getattr(args, "fmt", "markdown"))

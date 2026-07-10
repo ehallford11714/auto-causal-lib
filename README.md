@@ -101,6 +101,27 @@ print(ml.plan.to_markdown())
 print(ml.fit.to_markdown())
 ```
 
+### Real dataset examples (offline)
+
+Bundled Iris, Wine, Titanic, Gapminder subset, Diabetes, and California housing sample — no network required. Licenses/attribution: [DATASETS.md](DATASETS.md). Full walkthrough: [docs/EXAMPLES.md](docs/EXAMPLES.md).
+
+```python
+from autocausal import AutoCausal, load_dataset
+
+df = load_dataset("iris")  # Fisher Iris CSV from package data
+ac = AutoCausal(df)
+ac.mine().impute().discover(use_iv=False, min_abs_corr=0.2)
+print(ac.report())  # exploratory edges — not scientific flower-causation claims
+```
+
+```bash
+python examples/iris_causal.py
+python examples/iris_causal.py --insight
+python examples/multi_dataset_tour.py
+python -m autocausal public load iris
+python -m autocausal insight demo --dataset iris --no-slm
+```
+
 ### NLP hints & behavioral traces (library-first)
 
 These are **importable modules** for apps and notebooks — the CLI is optional.
@@ -122,6 +143,38 @@ print(result.report.to_markdown())    # hypothesized stimulus→response / habit
 ```
 
 See [docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md) (Python API first, CLI secondary).
+
+
+### Public causal mining (library-first)
+
+Join bundled/open demo sources, mine associations, and run exploratory discovery:
+
+`python
+from autocausal import AutoCausal, PublicCausalMiner, mine_public
+
+report = AutoCausal.mine_public(
+    ["finance_demo", "demographics_demo", "health_demo"],
+    join_on="region",
+    discover=True,
+    use_iv=True,
+)
+print(report.to_markdown())
+
+# Explicit miner
+miner = PublicCausalMiner(["marketing_demo", "instruments_demo", "demographics_demo"])
+report = miner.run(discover=True, validate=True)
+
+# Convenience
+report = mine_public(["finance_demo", "climate_demo"], discover=True)
+`
+
+`ash
+python -m autocausal public list --offline
+python -m autocausal public mine --sources finance_demo,demographics_demo --discover
+python -m autocausal public causal --sources finance_demo,demographics_demo,health_demo -o report.md
+`
+
+See [docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md).
 
 ### Insight suite (library-first)
 
@@ -149,9 +202,10 @@ report = InsightSuite.from_autocausal(ac).run(use_slm=False)
 python -m autocausal insight run --csv data.csv --no-slm -o report.md
 python -m autocausal insight loop --csv data.csv --rounds 3 --no-slm -o loop.md
 python -m autocausal insight demo
+python -m autocausal insight demo --dataset iris --no-slm
 ```
 
-See [docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md).
+See [docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md) and [docs/EXAMPLES.md](docs/EXAMPLES.md).
 
 ### Guiding direction with LLMIntent / Retracement / Kineteq pivots
 
@@ -211,9 +265,26 @@ python -m autocausal discover \
   --table events
 ```
 
+
+## Epistemic caveats
+
+AutoCausalLib is an **exploratory** toolkit. Please read these before treating outputs as science:
+
+- **Discovery ≠ identification.** PC-lite / scored edges are *candidate* relationships, not proven causal effects.
+- **Imputation and joins change the sample.** Missing-data fills and multi-source joins can invent associations (including ecological fallacy on region aggregates).
+- **SLM text is assistance only.** Narratives, experiment suggestions, and role hints from rules/HF models are generative — not statistical proof.
+- **IV / 2SLS paths are soft.** Optional instruments need human design review (relevance, exclusion); lite F-stats are not a substitute.
+- **Bundled public/behavioral tables** include MIT synthetic fixtures *and* real educational CSVs (Iris, etc.) — see [DATASETS.md](DATASETS.md). Exploratory edges on Iris are illustrative, not flower-causation science.
+- **Physics / KPI loops** are predictive rollouts and grounding aids — not true physical or causal identification.
+
+Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these caveats; keep them in downstream apps.
+
 ## Docs
 
+- [Examples (Iris + real datasets)](docs/EXAMPLES.md)
+- [Dataset licenses & paths](DATASETS.md)
 - [Insight suite (library API + optional SLM)](docs/INSIGHT_SUITE.md)
+- [Public causal mining (multi-source join)](docs/PUBLIC_CAUSAL_MINING.md)
 - [NLP & behavioral traces (library API)](docs/NLP_AND_BEHAVIORAL_TRACES.md)
 - [KPI ML loop (SLM → PyTorch)](docs/ML_KPI_LOOP.md)
 - [ML Model Hub proposals](../docs/AUTOCAUSAL_ML_MODEL_HUB_PROPOSALS.md)

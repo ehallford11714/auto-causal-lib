@@ -325,9 +325,29 @@ def demo_insight(
     use_slm: bool = False,
     max_rounds: int = 2,
     research_loop: bool = True,
+    dataset: Optional[str] = None,
 ) -> InsightReport:
-    """Offline synthetic IV-style demo → insight report (rule path by default)."""
+    """Offline demo → insight report (rule path by default).
+
+    Without ``dataset``, uses a synthetic IV-style panel. With ``dataset``
+    (e.g. ``iris``, ``wine``, ``titanic``), loads a bundled real example CSV.
+    """
     import numpy as np
+
+    if dataset:
+        from autocausal.datasets import get_dataset, load_dataset
+
+        meta = get_dataset(dataset)
+        df = load_dataset(dataset, allow_network=False)
+        text = (
+            f"Exploratory associations in {meta.name} "
+            f"(outcome hint: {meta.suggested_outcome or 'n/a'}). "
+            f"{meta.epistemic_note}"
+        )
+        suite = InsightSuite(use_slm=use_slm)
+        if research_loop:
+            return suite.run_loop(df, max_rounds=max_rounds, join_sources=None, text=text)
+        return suite.run(df, text=text)
 
     rng = np.random.default_rng(42)
     n = 80

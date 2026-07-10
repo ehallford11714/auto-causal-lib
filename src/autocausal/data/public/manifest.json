@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "description": "AutoCausalLib public / demo dataset suite",
   "sources": [
     {
@@ -314,13 +314,205 @@
       "offline": true
     },
     {
+      "id": "iris",
+      "name": "Iris (Fisher)",
+      "domain": "demo",
+      "access": "bundled",
+      "license_note": "UCI / Fisher Iris \u2014 public domain / open educational use.",
+      "description": "Classic 150-row flower measurements. Exploratory edges are illustrative \u2014 not scientific claims about flower causation.",
+      "path": "iris.csv",
+      "url": "https://raw.githubusercontent.com/plotly/datasets/master/iris.csv",
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "sepal_length",
+          "dtype": "float"
+        },
+        {
+          "column": "sepal_width",
+          "dtype": "float"
+        },
+        {
+          "column": "petal_length",
+          "dtype": "float"
+        },
+        {
+          "column": "petal_width",
+          "dtype": "float"
+        },
+        {
+          "column": "species",
+          "dtype": "str"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 150,
+      "offline": true
+    },
+    {
+      "id": "wine",
+      "name": "Wine recognition (UCI)",
+      "domain": "chemistry",
+      "access": "bundled",
+      "license_note": "UCI Wine \u2014 open educational / redistributable research use.",
+      "description": "178 Italian wines \u00d7 chemical features + cultivar.",
+      "path": "wine.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "alcohol",
+          "dtype": "float"
+        },
+        {
+          "column": "cultivar",
+          "dtype": "int"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 178,
+      "offline": true
+    },
+    {
+      "id": "diabetes",
+      "name": "Diabetes (sklearn / Efron)",
+      "domain": "health",
+      "access": "bundled",
+      "license_note": "sklearn diabetes \u2014 redistributable educational dataset.",
+      "description": "442 patients \u00d7 physiologic features \u2192 disease progression.",
+      "path": "diabetes.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "bmi",
+          "dtype": "float"
+        },
+        {
+          "column": "bp",
+          "dtype": "float"
+        },
+        {
+          "column": "disease_progression",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 442,
+      "offline": true
+    },
+    {
+      "id": "titanic",
+      "name": "Titanic passengers (educational)",
+      "domain": "demographics",
+      "access": "bundled",
+      "license_note": "Public-domain passenger records via open educational CSV mirrors; cite upstream when publishing.",
+      "description": "Passenger class/sex/age/fare \u2192 survival (tabular classic).",
+      "path": "titanic.csv",
+      "url": "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv",
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "Survived",
+          "dtype": "int"
+        },
+        {
+          "column": "Pclass",
+          "dtype": "int"
+        },
+        {
+          "column": "Sex",
+          "dtype": "str"
+        },
+        {
+          "column": "Age",
+          "dtype": "float"
+        },
+        {
+          "column": "Fare",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 891,
+      "offline": true
+    },
+    {
+      "id": "gapminder_subset",
+      "name": "Gapminder country indicators (subset)",
+      "domain": "demographics",
+      "access": "bundled",
+      "license_note": "Gapminder open data subset \u2014 cite Gapminder when publishing.",
+      "description": "Small country-year panel: lifeExp, pop, gdpPercap.",
+      "path": "gapminder_subset.csv",
+      "url": "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "country",
+          "dtype": "str"
+        },
+        {
+          "column": "year",
+          "dtype": "int"
+        },
+        {
+          "column": "lifeExp",
+          "dtype": "float"
+        },
+        {
+          "column": "gdpPercap",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "year"
+      ],
+      "rows_approx": 36,
+      "offline": true
+    },
+    {
+      "id": "california_housing_sample",
+      "name": "California housing (250-row sample)",
+      "domain": "housing",
+      "access": "bundled",
+      "license_note": "sklearn California housing sample \u2014 educational use.",
+      "description": "Housing block features \u2192 median house value (sample).",
+      "path": "california_housing_sample.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "MedInc",
+          "dtype": "float"
+        },
+        {
+          "column": "HouseAge",
+          "dtype": "float"
+        },
+        {
+          "column": "median_house_value",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 250,
+      "offline": true
+    },
+    {
       "id": "iris_open",
       "name": "Iris (open CSV mirror)",
       "domain": "demo",
       "access": "download",
       "license_note": "Classic UCI Iris; public domain / open educational use.",
-      "description": "Optional network download of Iris CSV for soft-fail demos.",
-      "path": null,
+      "description": "Optional network refresh of Iris; offline load falls back to bundled ``iris``.",
+      "path": "iris.csv",
       "url": "https://raw.githubusercontent.com/plotly/datasets/master/iris.csv",
       "sql_url_env": null,
       "table": null,
@@ -344,8 +536,8 @@
       "domain": "demographics",
       "access": "download",
       "license_note": "Gapminder open data; cite Gapminder when publishing.",
-      "description": "Optional network download \u2014 soft-fails offline.",
-      "path": null,
+      "description": "Optional network download of full Gapminder five-year CSV; offline demos use bundled ``gapminder_subset``.",
+      "path": "gapminder_subset.csv",
       "url": "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
       "sql_url_env": null,
       "table": null,

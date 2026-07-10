@@ -147,8 +147,12 @@ python -m autocausal insight run --csv data.csv --join demographics_demo --no-sl
 python -m autocausal insight run --csv data.csv --slm --text "what drives Y?" -o report.json
 python -m autocausal insight loop --csv data.csv --rounds 3 --join-sources demographics_demo --no-slm
 python -m autocausal insight demo --no-slm
+python -m autocausal insight demo --dataset iris --no-slm
 python -m autocausal insight demo -o demo_insight.md
 ```
+
+Bundled real datasets (`iris`, `wine`, `titanic`, …) work offline via
+`demo_insight(dataset="iris")` / `--dataset iris`. See [EXAMPLES.md](EXAMPLES.md).
 
 ## Public exports
 

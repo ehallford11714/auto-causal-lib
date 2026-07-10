@@ -95,6 +95,14 @@ def test_iris_download_skipped_placeholder():
     load_public("iris_open", allow_network=True)
 
 
+def test_iris_bundled_offline():
+    df = load_public("iris", allow_network=False)
+    assert len(df) == 150
+    # download id soft-falls back to bundled when network disabled
+    df2 = load_public("iris_open", allow_network=False)
+    assert len(df2) >= 100
+
+
 def test_auto_with_join(tmp_path: Path):
     rng = np.random.default_rng(4)
     n = 60

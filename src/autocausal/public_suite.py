@@ -23,10 +23,12 @@ __all__ = [
     "ensure_bundled_public_data",
     "manifest_path",
     "PUBLIC_DIR",
+    "EXAMPLES_DIR",
     "BUNDLED_IDS",
+    "REAL_EXAMPLE_IDS",
 ]
 
-# Expected offline fixtures (regenerate manifest if any missing).
+# Expected offline synthetic fixtures (regenerate if any missing).
 BUNDLED_IDS = (
     "finance_demo",
     "marketing_demo",
@@ -38,8 +40,28 @@ BUNDLED_IDS = (
     "health_demo",
 )
 
+# Real / public-style example CSVs under data/examples/ (offline-first).
+REAL_EXAMPLE_IDS = (
+    "iris",
+    "wine",
+    "diabetes",
+    "titanic",
+    "gapminder_subset",
+    "california_housing_sample",
+)
+
+# Aliases → canonical public / example ids
+_PUBLIC_ALIASES = {
+    "iris_open": "iris",
+    "gapminder_open": "gapminder_subset",
+    "gapminder": "gapminder_subset",
+    "housing": "california_housing_sample",
+    "california_housing": "california_housing_sample",
+}
+
 
 PUBLIC_DIR = Path(__file__).resolve().parent / "data" / "public"
+EXAMPLES_DIR = Path(__file__).resolve().parent / "data" / "examples"
 
 
 @dataclass
@@ -72,9 +94,26 @@ def _write_csv(path: Path, df: pd.DataFrame) -> None:
     df.to_csv(path, index=False)
 
 
+def _resolve_bundled_csv(src: PublicSource) -> Path:
+    """Resolve a bundled CSV under public/ or examples/."""
+    assert src.path
+    name = Path(src.path).name
+    candidates = [
+        PUBLIC_DIR / src.path,
+        PUBLIC_DIR / name,
+        EXAMPLES_DIR / name,
+        EXAMPLES_DIR / src.path,
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return candidates[0]
+
+
 def ensure_bundled_public_data(*, force: bool = False) -> Path:
     """Create bundled public CSVs + manifest if missing (idempotent)."""
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+    EXAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     man = manifest_path()
     if man.exists() and not force:
         # ensure files listed exist and expected bundled ids are present
@@ -82,12 +121,28 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             data = json.loads(man.read_text(encoding="utf-8"))
             ids = {item.get("id") for item in data.get("sources", [])}
             ok = all(bid in ids for bid in BUNDLED_IDS)
+            ok = ok and all(rid in ids for rid in REAL_EXAMPLE_IDS)
             for item in data.get("sources", []):
-                if item.get("access") == "bundled" and item.get("path"):
-                    if not (PUBLIC_DIR / item["path"]).exists():
+                if item.get("access") != "bundled" or not item.get("path"):
+                    continue
+                tmp = PublicSource(
+                    id=str(item["id"]),
+                    name=str(item.get("name", "")),
+                    domain=str(item.get("domain", "")),
+                    access="bundled",
+                    license_note=str(item.get("license_note", "")),
+                    description=str(item.get("description", "")),
+                    path=item.get("path"),
+                )
+                if not _resolve_bundled_csv(tmp).is_file():
+                    # real examples may be missing only if package incomplete
+                    if item.get("id") in REAL_EXAMPLE_IDS:
                         ok = False
                         break
-            if ok and int(data.get("version", 0)) >= 2:
+                    if item.get("id") in BUNDLED_IDS:
+                        ok = False
+                        break
+            if ok and int(data.get("version", 0)) >= 3:
                 return PUBLIC_DIR
         except Exception:
             pass
@@ -369,12 +424,131 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             offline=True,
         ),
         PublicSource(
+            id="iris",
+            name="Iris (Fisher)",
+            domain="demo",
+            access="bundled",
+            license_note="UCI / Fisher Iris — public domain / open educational use.",
+            description=(
+                "Classic 150-row flower measurements. Exploratory edges are "
+                "illustrative — not scientific claims about flower causation."
+            ),
+            path="iris.csv",
+            url="https://raw.githubusercontent.com/plotly/datasets/master/iris.csv",
+            schema_summary=[
+                {"column": "sepal_length", "dtype": "float"},
+                {"column": "sepal_width", "dtype": "float"},
+                {"column": "petal_length", "dtype": "float"},
+                {"column": "petal_width", "dtype": "float"},
+                {"column": "species", "dtype": "str"},
+            ],
+            suggested_join_keys=[],
+            rows_approx=150,
+            offline=True,
+        ),
+        PublicSource(
+            id="wine",
+            name="Wine recognition (UCI)",
+            domain="chemistry",
+            access="bundled",
+            license_note="UCI Wine — open educational / redistributable research use.",
+            description="178 Italian wines × chemical features + cultivar.",
+            path="wine.csv",
+            schema_summary=[
+                {"column": "alcohol", "dtype": "float"},
+                {"column": "cultivar", "dtype": "int"},
+            ],
+            suggested_join_keys=[],
+            rows_approx=178,
+            offline=True,
+        ),
+        PublicSource(
+            id="diabetes",
+            name="Diabetes (sklearn / Efron)",
+            domain="health",
+            access="bundled",
+            license_note="sklearn diabetes — redistributable educational dataset.",
+            description="442 patients × physiologic features → disease progression.",
+            path="diabetes.csv",
+            schema_summary=[
+                {"column": "bmi", "dtype": "float"},
+                {"column": "bp", "dtype": "float"},
+                {"column": "disease_progression", "dtype": "float"},
+            ],
+            suggested_join_keys=[],
+            rows_approx=442,
+            offline=True,
+        ),
+        PublicSource(
+            id="titanic",
+            name="Titanic passengers (educational)",
+            domain="demographics",
+            access="bundled",
+            license_note=(
+                "Public-domain passenger records via open educational CSV mirrors; "
+                "cite upstream when publishing."
+            ),
+            description="Passenger class/sex/age/fare → survival (tabular classic).",
+            path="titanic.csv",
+            url="https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv",
+            schema_summary=[
+                {"column": "Survived", "dtype": "int"},
+                {"column": "Pclass", "dtype": "int"},
+                {"column": "Sex", "dtype": "str"},
+                {"column": "Age", "dtype": "float"},
+                {"column": "Fare", "dtype": "float"},
+            ],
+            suggested_join_keys=[],
+            rows_approx=891,
+            offline=True,
+        ),
+        PublicSource(
+            id="gapminder_subset",
+            name="Gapminder country indicators (subset)",
+            domain="demographics",
+            access="bundled",
+            license_note="Gapminder open data subset — cite Gapminder when publishing.",
+            description="Small country-year panel: lifeExp, pop, gdpPercap.",
+            path="gapminder_subset.csv",
+            url="https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
+            schema_summary=[
+                {"column": "country", "dtype": "str"},
+                {"column": "year", "dtype": "int"},
+                {"column": "lifeExp", "dtype": "float"},
+                {"column": "gdpPercap", "dtype": "float"},
+            ],
+            suggested_join_keys=["year"],
+            rows_approx=36,
+            offline=True,
+        ),
+        PublicSource(
+            id="california_housing_sample",
+            name="California housing (250-row sample)",
+            domain="housing",
+            access="bundled",
+            license_note="sklearn California housing sample — educational use.",
+            description="Housing block features → median house value (sample).",
+            path="california_housing_sample.csv",
+            schema_summary=[
+                {"column": "MedInc", "dtype": "float"},
+                {"column": "HouseAge", "dtype": "float"},
+                {"column": "median_house_value", "dtype": "float"},
+            ],
+            suggested_join_keys=[],
+            rows_approx=250,
+            offline=True,
+        ),
+        PublicSource(
             id="iris_open",
             name="Iris (open CSV mirror)",
             domain="demo",
             access="download",
             license_note="Classic UCI Iris; public domain / open educational use.",
-            description="Optional network download of Iris CSV for soft-fail demos.",
+            description=(
+                "Optional network refresh of Iris; offline load falls back to "
+                "bundled ``iris``."
+            ),
+            path="iris.csv",
             url="https://raw.githubusercontent.com/plotly/datasets/master/iris.csv",
             schema_summary=[
                 {"column": "sepal_length", "dtype": "float"},
@@ -390,7 +564,11 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             domain="demographics",
             access="download",
             license_note="Gapminder open data; cite Gapminder when publishing.",
-            description="Optional network download — soft-fails offline.",
+            description=(
+                "Optional network download of full Gapminder five-year CSV; "
+                "offline demos use bundled ``gapminder_subset``."
+            ),
+            path="gapminder_subset.csv",
             url="https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
             schema_summary=[
                 {"column": "country", "dtype": "str"},
@@ -418,7 +596,7 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
     ]
 
     payload = {
-        "version": 2,
+        "version": 3,
         "description": "AutoCausalLib public / demo dataset suite",
         "sources": [s.to_dict() for s in sources],
     }
@@ -440,10 +618,16 @@ def list_public(*, offline_only: bool = False) -> list[PublicSource]:
 
 
 def get_public(public_id: str) -> PublicSource:
-    for s in list_public():
+    sources = list_public()
+    for s in sources:
         if s.id == public_id:
             return s
-    known = ", ".join(x.id for x in list_public())
+    resolved = _PUBLIC_ALIASES.get(public_id)
+    if resolved:
+        for s in sources:
+            if s.id == resolved:
+                return s
+    known = ", ".join(x.id for x in sources)
     raise KeyError(f"Unknown public source {public_id!r}. Known: {known}")
 
 
@@ -459,26 +643,72 @@ def load_public(
     allow_network: bool = True,
     timeout: float = 8.0,
 ) -> pd.DataFrame:
-    """Load a suite member. Network sources soft-fail with a clear error."""
+    """Load a suite member. Network sources soft-fail to bundled when possible."""
+    # Prefer datasets module for real examples (offline-first)
+    if public_id in REAL_EXAMPLE_IDS or public_id in _PUBLIC_ALIASES:
+        try:
+            from autocausal.datasets import load_dataset
+
+            return load_dataset(
+                public_id,
+                allow_network=allow_network,
+                prefer_network=bool(allow_network and public_id.endswith("_open")),
+            )
+        except Exception:
+            pass  # fall through to manifest path
+
     src = get_public(public_id)
-    if src.access == "bundled":
-        assert src.path
-        path = PUBLIC_DIR / src.path
+    if src.access == "bundled" or (
+        src.path and _resolve_bundled_csv(src).is_file() and not allow_network
+    ):
+        path = _resolve_bundled_csv(src)
         if not path.exists():
             ensure_bundled_public_data(force=True)
-        return pd.read_csv(path)
+            path = _resolve_bundled_csv(src)
+        if path.is_file():
+            return pd.read_csv(path)
+        if src.access == "bundled":
+            raise FileNotFoundError(f"{public_id}: bundled CSV missing at {path}")
 
     if src.access == "download":
+        # Offline-first: try bundled path before network
+        if src.path:
+            path = _resolve_bundled_csv(src)
+            if path.is_file() and not allow_network:
+                return pd.read_csv(path)
         if not allow_network:
+            # soft fallback to alias bundle
+            alias = _PUBLIC_ALIASES.get(public_id)
+            if alias:
+                from autocausal.datasets import load_dataset
+
+                return load_dataset(alias, allow_network=False)
+            if src.path and _resolve_bundled_csv(src).is_file():
+                return pd.read_csv(_resolve_bundled_csv(src))
             raise RuntimeError(f"{public_id}: network disabled (offline mode)")
         if not src.url:
             raise RuntimeError(f"{public_id}: no download URL configured")
         try:
             return _download_csv(src.url, timeout=timeout)
         except Exception as e:
+            if src.path and _resolve_bundled_csv(src).is_file():
+                return pd.read_csv(_resolve_bundled_csv(src))
+            alias = _PUBLIC_ALIASES.get(public_id)
+            if alias:
+                from autocausal.datasets import load_dataset
+
+                return load_dataset(alias, allow_network=False)
             raise RuntimeError(
                 f"{public_id}: download soft-fail ({type(e).__name__}: {e})"
             ) from e
+
+    if src.access == "bundled":
+        assert src.path
+        path = _resolve_bundled_csv(src)
+        if not path.exists():
+            ensure_bundled_public_data(force=True)
+            path = _resolve_bundled_csv(src)
+        return pd.read_csv(path)
 
     if src.access == "sql_demo":
         import os
