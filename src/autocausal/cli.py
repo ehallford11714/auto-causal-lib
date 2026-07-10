@@ -1,4 +1,8 @@
-"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public|physics|ml ..."""
+"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public|physics|ml|nlp|behavioral|insight ...
+
+Thin consumer of library modules — prefer importing ``autocausal.nlp`` /
+``autocausal.behavioral`` / ``autocausal.insight`` directly in apps and notebooks.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +20,13 @@ def _emit(text: str, out: Optional[str]) -> None:
     if out:
         Path(out).write_text(text, encoding="utf-8")
         print(f"Wrote {out}", file=sys.stderr)
-    print(text)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        # Windows consoles (cp1252) may lack some markdown punctuation
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        sys.stdout.buffer.write(text.encode(enc, errors="replace"))
+        sys.stdout.buffer.write(b"\n")
 
 
 def _parse_guides(raw: Optional[str]) -> Optional[list[str]]:
@@ -260,7 +270,7 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("-o", "--out", type=str, default=None)
 
     # public suite
-    pub = sub.add_parser("public", help="Public / demo dataset suite")
+    pub = sub.add_parser("public", help="Public / demo dataset suite + causal mining")
     pub_sub = pub.add_subparsers(dest="public_cmd")
     pub_list = pub_sub.add_parser("list", help="List suite members")
     pub_list.add_argument("--offline", action="store_true")
@@ -271,6 +281,40 @@ def _build_parser() -> argparse.ArgumentParser:
     pub_load.add_argument("id", type=str)
     pub_load.add_argument("--allow-network", action="store_true")
     pub_load.add_argument("-o", "--out", type=str, default=None)
+    pub_mine = pub_sub.add_parser(
+        "mine",
+        help="Join public sources -> mine (+ optional discover)",
+    )
+    pub_mine.add_argument(
+        "--sources",
+        type=str,
+        default="finance_demo,demographics_demo,health_demo",
+        help="Comma-separated public suite ids",
+    )
+    pub_mine.add_argument("--join-on", type=str, default=None, dest="join_on")
+    pub_mine.add_argument("--discover", action="store_true", help="Also run causal discovery")
+    pub_mine.add_argument("--no-iv", action="store_true")
+    pub_mine.add_argument("--allow-network", action="store_true")
+    pub_mine.add_argument("--min-score", type=float, default=0.15, dest="min_score")
+    pub_mine.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
+    pub_mine.add_argument("-o", "--out", type=str, default=None)
+    pub_causal = pub_sub.add_parser(
+        "causal",
+        help="Full public corpus causal report (mine -> impute -> discover -> markdown/JSON)",
+    )
+    pub_causal.add_argument(
+        "--sources",
+        type=str,
+        default="finance_demo,demographics_demo,climate_demo,health_demo",
+        help="Comma-separated public suite ids",
+    )
+    pub_causal.add_argument("--join-on", type=str, default=None, dest="join_on")
+    pub_causal.add_argument("--no-iv", action="store_true")
+    pub_causal.add_argument("--validate", action="store_true", help="Light edge↔association check")
+    pub_causal.add_argument("--allow-network", action="store_true")
+    pub_causal.add_argument("--min-corr", type=float, default=0.12, dest="min_corr")
+    pub_causal.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
+    pub_causal.add_argument("-o", "--out", type=str, default=None)
 
     # ml — KPI-mined loop + imputer fit
     ml = sub.add_parser("ml", help="KPI-mined causal loop / ML Model Hub slice")
@@ -312,7 +356,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # isolates-causal — soft IntentIsolates layer IV bridge
     ic = sub.add_parser(
         "isolates-causal",
-        help="Layer motifs → indication vs IV (requires intentisolates)",
+        help="Layer motifs -> indication vs IV (requires intentisolates)",
     )
     ic.add_argument("--text", type=str, required=True, help="Input text")
     ic.add_argument("--outcome-hint", type=str, default=None, dest="outcome_hint")
@@ -324,6 +368,44 @@ def _build_parser() -> argparse.ArgumentParser:
         "--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt"
     )
     ic.add_argument("-o", "--out", type=str, default=None)
+
+    # nlp — thin CLI over autocausal.nlp library
+    nlp_p = sub.add_parser("nlp", help="NLTK NLP tooling (library: autocausal.nlp)")
+    nlp_sub = nlp_p.add_subparsers(dest="nlp_cmd")
+    nlp_ex = nlp_sub.add_parser("extract", help="Extract TextCausalHints from text")
+    nlp_ex.add_argument("--text", type=str, required=True)
+    nlp_ex.add_argument("--format", choices=["markdown", "json"], default="json", dest="fmt")
+    nlp_ex.add_argument("-o", "--out", type=str, default=None)
+    nlp_ft = nlp_sub.add_parser("features", help="Text column -> NLP feature CSV columns")
+    nlp_ft.add_argument("--csv", type=str, required=True)
+    nlp_ft.add_argument("--text-col", type=str, required=True, dest="text_col")
+    nlp_ft.add_argument("--prefix", type=str, default="nlp_")
+    nlp_ft.add_argument("-o", "--out", type=str, default=None)
+    nlp_ft.add_argument("--format", choices=["json", "table"], default="table", dest="fmt")
+    nlp_st = nlp_sub.add_parser("status", help="NLTK install / corpora status (offline)")
+    nlp_st.add_argument("--format", choices=["json"], default="json", dest="fmt")
+    nlp_dl = nlp_sub.add_parser("download", help="Soft-fail download of NLTK corpora")
+    nlp_dl.add_argument("--format", choices=["json"], default="json", dest="fmt")
+
+    # behavioral — thin CLI over autocausal.behavioral library
+    beh = sub.add_parser("behavioral", help="Behavioral science traces (library: autocausal.behavioral)")
+    beh_sub = beh.add_subparsers(dest="behavioral_cmd")
+    beh_list = beh_sub.add_parser("list", help="List bundled demo traces")
+    beh_list.add_argument("--format", choices=["json", "table"], default="table", dest="fmt")
+    beh_mine = beh_sub.add_parser("mine", help="Mine demo/file traces -> hypothesized edges")
+    beh_mine.add_argument("--demo", type=str, default="habit_loop", help="Demo id or omit with --csv")
+    beh_mine.add_argument("--csv", type=str, default=None, help="Trace CSV path")
+    beh_mine.add_argument("--discover", action="store_true")
+    beh_mine.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
+    beh_mine.add_argument("-o", "--out", type=str, default=None)
+
+    # insight — thin CLI over autocausal.insight (soft-optional if package incomplete)
+    try:
+        from autocausal.insight.cli_hooks import register_insight_parser
+
+        register_insight_parser(sub)
+    except Exception:
+        pass
 
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
@@ -408,6 +490,31 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(df.head(20).to_string(index=False))
                 print(f"\n[{len(df)} rows x {len(df.columns)} cols]", file=sys.stderr)
+            return 0
+        if args.public_cmd in ("mine", "causal"):
+            from autocausal.public_causal import mine_public
+
+            src_ids = [x.strip() for x in args.sources.split(",") if x.strip()]
+            on_raw = getattr(args, "join_on", None)
+            on = [x.strip() for x in on_raw.split(",") if x.strip()] if on_raw else None
+            do_discover = args.public_cmd == "causal" or getattr(args, "discover", False)
+            report = mine_public(
+                src_ids,
+                join_on=on,
+                allow_network=bool(getattr(args, "allow_network", False)),
+                discover=do_discover,
+                use_iv=not getattr(args, "no_iv", False),
+                min_score=getattr(args, "min_score", 0.15),
+                min_abs_corr=getattr(args, "min_corr", 0.12),
+                validate=bool(getattr(args, "validate", False)),
+            )
+            if args.fmt == "json":
+                text = report.to_json()
+            elif args.fmt == "both":
+                text = report.to_markdown() + "\n\n```json\n" + report.to_json() + "\n```\n"
+            else:
+                text = report.to_markdown()
+            _emit(text, args.out)
             return 0
         parser.parse_args(["public", "--help"])
         return 0
@@ -761,6 +868,93 @@ def main(argv: list[str] | None = None) -> int:
             text = result.to_markdown()
         _emit(text, args.out)
         return 0
+
+    if args.command == "nlp":
+        if args.nlp_cmd == "extract":
+            from autocausal.nlp import extract_causal_hints_from_text
+
+            hints = extract_causal_hints_from_text(args.text)
+            if args.fmt == "markdown":
+                roles = hints.roles.to_dict()
+                lines = [
+                    "# TextCausalHints",
+                    "",
+                    f"> {hints.caveat}",
+                    "",
+                    f"- backend: `{hints.backend}`",
+                    f"- modality: {', '.join(hints.modality_markers) or '(none)'}",
+                    "",
+                    "## Roles",
+                ]
+                for role, items in roles.items():
+                    lines.append(f"- **{role}**: {', '.join(items) or '(none)'}")
+                text = "\n".join(lines) + "\n"
+            else:
+                text = json.dumps(hints.to_dict(), indent=2)
+            _emit(text, args.out)
+            return 0
+        if args.nlp_cmd == "features":
+            import pandas as pd
+            from autocausal.nlp import NlpFeatureBuilder
+
+            df = pd.read_csv(args.csv)
+            out_df = NlpFeatureBuilder(prefix=args.prefix).transform_frame(df, args.text_col)
+            if args.out:
+                out_df.to_csv(args.out, index=False)
+                print(f"Wrote {args.out} ({len(out_df)} rows)", file=sys.stderr)
+            if args.fmt == "json":
+                print(json.dumps({"columns": list(out_df.columns), "n_rows": len(out_df)}, indent=2))
+            else:
+                print(out_df.head(10).to_string(index=False))
+            return 0
+        if args.nlp_cmd == "status":
+            from autocausal.nlp import nltk_status
+
+            print(json.dumps(nltk_status().to_dict(), indent=2))
+            return 0
+        if args.nlp_cmd == "download":
+            from autocausal.nlp import ensure_nltk_data
+
+            print(json.dumps(ensure_nltk_data(), indent=2))
+            return 0
+        parser.parse_args(["nlp", "--help"])
+        return 0
+
+    if args.command == "behavioral":
+        if args.behavioral_cmd == "list":
+            from autocausal.behavioral import list_demos
+
+            demos = list_demos()
+            if args.fmt == "json":
+                print(json.dumps(demos, indent=2))
+            else:
+                print(f"{'id':28} description")
+                for d in demos:
+                    print(f"{d['id']:28} {d['description']}")
+            return 0
+        if args.behavioral_cmd == "mine":
+            from autocausal.behavioral import mine_behavioral_traces
+
+            source = args.csv or args.demo
+            result = mine_behavioral_traces(source, discover=bool(args.discover))
+            if args.fmt == "json":
+                text = json.dumps(result.to_dict(), indent=2, default=str)
+            elif args.fmt == "both":
+                text = result.to_markdown() + "\n\n```json\n" + json.dumps(result.to_dict(), indent=2, default=str) + "\n```\n"
+            else:
+                text = result.to_markdown()
+            _emit(text, args.out)
+            return 0
+        parser.parse_args(["behavioral", "--help"])
+        return 0
+
+    if args.command == "insight":
+        try:
+            from autocausal.insight.cli_hooks import handle_insight
+        except ImportError as e:
+            print(f"insight module unavailable: {e}", file=sys.stderr)
+            return 2
+        return handle_insight(args)
 
     parser.print_help()
     return 1

@@ -20,6 +20,10 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Physics loop** — analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`, optional **Streamlit demo** (`physics ui`)
 - **KPI ML loop** — SLM/Rule `ModelConstructPlan` → median/sklearn/**PyTorch MLP** impute → discover → FitReport ([docs/ML_KPI_LOOP.md](docs/ML_KPI_LOOP.md))
 - **Isolates causal** — soft bridge to IntentIsolates layer motifs → indication vs IV ([docs/LAYER_CAUSAL_IV.md](docs/LAYER_CAUSAL_IV.md))
+- **NLP library** (`autocausal.nlp`) — soft-optional NLTK tokenize/POS/sentiment, `TextCausalHints`, `NlpFeatureBuilder` for apps/notebooks ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
+- **Behavioral traces** (`autocausal.behavioral`) — habit/nudge/reinforcement demos → panel → mine/discover ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
+- **Public causal mining** — multi-source join of bundled/open datasets → mine → discover → report ([docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md))
+- **Insight suite** (`autocausal.insight`) — `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
 - Markdown / JSON reports and a CLI
 
 ## Install
@@ -97,6 +101,58 @@ print(ml.plan.to_markdown())
 print(ml.fit.to_markdown())
 ```
 
+### NLP hints & behavioral traces (library-first)
+
+These are **importable modules** for apps and notebooks — the CLI is optional.
+
+```python
+from autocausal.nlp import extract_causal_hints_from_text, NlpFeatureBuilder
+from autocausal.behavioral import BehavioralTraceStore, mine_behavioral_traces
+
+hints = extract_causal_hints_from_text(
+    "Randomized treatment leads to higher revenue, associated with age."
+)
+print(hints.roles.to_dict())          # treatment / outcome / confounder / instrument cues
+print(hints.to_guide_context())       # feed guide/discover
+
+features = NlpFeatureBuilder().transform(["because spend increases sales"])
+
+result = mine_behavioral_traces("habit_loop", discover=True)
+print(result.report.to_markdown())    # hypothesized stimulus→response / habit→outcome edges
+```
+
+See [docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md) (Python API first, CLI secondary).
+
+### Insight suite (library-first)
+
+```python
+from autocausal.insight import InsightSuite, ExperimentRecommender, run_insight_loop, demo_insight
+
+report = run_insight_loop("data.csv", text="what drives revenue?", use_slm=False)
+report.write("insight.md")
+
+# Closed loop: mine → guide/SLM → recommend experiments → join/remine → rediscover
+suite = InsightSuite(use_slm=False)
+report = suite.run_loop(
+    "data.csv", max_rounds=3, join_sources=["demographics_demo", "instruments_demo"]
+)
+print(report.experiments_recommended[:3])
+print(report.round_history)
+
+# From a pre-built AutoCausal
+from autocausal import AutoCausal
+ac = AutoCausal.from_csv("data.csv")
+report = InsightSuite.from_autocausal(ac).run(use_slm=False)
+```
+
+```bash
+python -m autocausal insight run --csv data.csv --no-slm -o report.md
+python -m autocausal insight loop --csv data.csv --rounds 3 --no-slm -o loop.md
+python -m autocausal insight demo
+```
+
+See [docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md).
+
 ### Guiding direction with LLMIntent / Retracement / Kineteq pivots
 
 Backends are **soft-optional**: missing packages soft-fail to stubs/fallbacks and never break core discovery.
@@ -123,6 +179,12 @@ python -m autocausal auto --csv data.csv --physics --horizon 5
 python -m autocausal ml loop --csv data.csv --text "what drives Y?"
 python -m autocausal ml loop --csv data.csv --torch --guides rule
 python -m autocausal ml fit-imputer --csv data.csv --backend median
+python -m autocausal nlp extract --text "treatment leads to revenue"
+python -m autocausal behavioral list
+python -m autocausal behavioral mine --demo habit_loop --discover
+python -m autocausal public list --offline
+python -m autocausal public mine --sources finance_demo,demographics_demo --discover
+python -m autocausal public causal --sources finance_demo,demographics_demo,health_demo -o report.md
 python -m autocausal slm-status
 python -m autocausal guides list
 python -m autocausal auto --csv data.csv --slm
@@ -151,6 +213,8 @@ python -m autocausal discover \
 
 ## Docs
 
+- [Insight suite (library API + optional SLM)](docs/INSIGHT_SUITE.md)
+- [NLP & behavioral traces (library API)](docs/NLP_AND_BEHAVIORAL_TRACES.md)
 - [KPI ML loop (SLM → PyTorch)](docs/ML_KPI_LOOP.md)
 - [ML Model Hub proposals](../docs/AUTOCAUSAL_ML_MODEL_HUB_PROPOSALS.md)
 - [Physics Streamlit demo](docs/PHYSICS_DEMO.md)

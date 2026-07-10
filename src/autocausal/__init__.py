@@ -20,6 +20,14 @@ __all__ = [
     "direct",
     "KPIMinedCausalLoop",
     "ModelConstructPlan",
+    "PublicCausalMiner",
+    "PublicCausalReport",
+    "mine_public",
+    "TextCausalHints",
+    "NlpFeatureBuilder",
+    "extract_causal_hints_from_text",
+    "BehavioralTraceStore",
+    "mine_behavioral_traces",
 ]
 
 
@@ -40,4 +48,16 @@ def __getattr__(name: str):
         from autocausal import ml as _ml
 
         return getattr(_ml, name)
+    if name in ("PublicCausalMiner", "PublicCausalReport", "mine_public"):
+        from autocausal import public_causal as _pc
+
+        return getattr(_pc, name)
+    if name in ("TextCausalHints", "NlpFeatureBuilder", "extract_causal_hints_from_text"):
+        from autocausal import nlp as _nlp
+
+        return getattr(_nlp, name)
+    if name in ("BehavioralTraceStore", "mine_behavioral_traces"):
+        from autocausal import behavioral as _beh
+
+        return getattr(_beh, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

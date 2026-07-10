@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autocausal"
-version = "0.5.2"
-description = "Auto-impute, mine, discover, KPI ML loops (SLM→PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
+version = "0.7.0"
+description = "Auto-impute, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLM→PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -74,7 +74,7 @@ Documentation = "docs/CONNECTIONS.md"
 where = ["src"]
 
 [tool.setuptools.package-data]
-autocausal = ["data/**/*", "data/public/**/*", "data/physics/**/*", "ml/schemas/*.json"]
+autocausal = ["data/**/*", "data/public/**/*", "data/physics/**/*", "data/behavioral/**/*", "ml/schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
