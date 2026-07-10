@@ -149,7 +149,7 @@ See [docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md) (Pyth
 
 Join bundled/open demo sources, mine associations, and run exploratory discovery:
 
-`python
+```python
 from autocausal import AutoCausal, PublicCausalMiner, mine_public
 
 report = AutoCausal.mine_public(
@@ -166,13 +166,13 @@ report = miner.run(discover=True, validate=True)
 
 # Convenience
 report = mine_public(["finance_demo", "climate_demo"], discover=True)
-`
+```
 
-`ash
+```bash
 python -m autocausal public list --offline
 python -m autocausal public mine --sources finance_demo,demographics_demo --discover
 python -m autocausal public causal --sources finance_demo,demographics_demo,health_demo -o report.md
-`
+```
 
 See [docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md).
 
