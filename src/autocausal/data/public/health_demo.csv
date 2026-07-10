@@ -1,0 +1,6 @@
+region,life_expectancy,hospital_beds_per_1k,vaccination_pct,smoking_pct
+US,78.5,2.9,68.0,14.0
+EU,81.0,5.1,72.0,22.0
+APAC,74.0,2.2,55.0,18.0
+LATAM,75.5,2.0,60.0,16.0
+MEA,70.0,1.4,48.0,12.0

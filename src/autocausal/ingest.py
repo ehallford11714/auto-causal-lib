@@ -73,8 +73,13 @@ def load_sqlalchemy(
             if limit is not None:
                 # Portable-ish LIMIT; dialects that need TOP should use query=
                 sql = f"{sql} LIMIT {int(limit)}"
+        # SQLAlchemy 2.x + some pandas builds disagree on connectable detection;
+        # execute explicitly then build a DataFrame (portable, offline-safe).
         with engine.connect() as conn:
-            return pd.read_sql(text(sql), conn)
+            result = conn.execute(text(sql))
+            rows = result.fetchall()
+            cols = list(result.keys())
+        return pd.DataFrame(rows, columns=cols)
     finally:
         engine.dispose()
 

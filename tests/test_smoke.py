@@ -41,6 +41,8 @@ def test_cli_module_help():
     assert "auto" in proc.stdout
     assert "ml" in proc.stdout
     assert "physics" in proc.stdout
+    assert "nlp" in proc.stdout
+    assert "behavioral" in proc.stdout
 
 
 def test_dialect_matrix_nonempty():

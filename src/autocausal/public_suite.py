@@ -19,10 +19,24 @@ __all__ = [
     "load_public",
     "suggest_join_keys",
     "join_public_frames",
+    "join_public_corpus",
     "ensure_bundled_public_data",
     "manifest_path",
     "PUBLIC_DIR",
+    "BUNDLED_IDS",
 ]
+
+# Expected offline fixtures (regenerate manifest if any missing).
+BUNDLED_IDS = (
+    "finance_demo",
+    "marketing_demo",
+    "policy_demo",
+    "demographics_demo",
+    "vision_stub",
+    "instruments_demo",
+    "climate_demo",
+    "health_demo",
+)
 
 
 PUBLIC_DIR = Path(__file__).resolve().parent / "data" / "public"
@@ -63,16 +77,17 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     man = manifest_path()
     if man.exists() and not force:
-        # ensure files listed exist
+        # ensure files listed exist and expected bundled ids are present
         try:
             data = json.loads(man.read_text(encoding="utf-8"))
-            ok = True
+            ids = {item.get("id") for item in data.get("sources", [])}
+            ok = all(bid in ids for bid in BUNDLED_IDS)
             for item in data.get("sources", []):
                 if item.get("access") == "bundled" and item.get("path"):
                     if not (PUBLIC_DIR / item["path"]).exists():
                         ok = False
                         break
-            if ok:
+            if ok and int(data.get("version", 0)) >= 2:
                 return PUBLIC_DIR
         except Exception:
             pass
@@ -176,6 +191,31 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
         }
     )
     _write_csv(PUBLIC_DIR / "instruments_demo.csv", instruments)
+
+    # 7) climate_demo — region-year weather / emissions stub (join on region, year)
+    climate = pd.DataFrame(
+        {
+            "region": ["US", "EU", "APAC", "LATAM", "MEA"] * 3,
+            "year": [2019] * 5 + [2020] * 5 + [2021] * 5,
+            "temp_anomaly": rng.normal(0.8, 0.3, size=15),
+            "precip_mm": rng.lognormal(6.5, 0.25, size=15),
+            "co2_index": 400 + np.arange(15) * 0.4 + rng.normal(0, 1, 15),
+            "extreme_events": rng.integers(0, 12, size=15),
+        }
+    )
+    _write_csv(PUBLIC_DIR / "climate_demo.csv", climate)
+
+    # 8) health_demo — region-level health / access stub
+    health = pd.DataFrame(
+        {
+            "region": ["US", "EU", "APAC", "LATAM", "MEA"],
+            "life_expectancy": [78.5, 81.0, 74.0, 75.5, 70.0],
+            "hospital_beds_per_1k": [2.9, 5.1, 2.2, 2.0, 1.4],
+            "vaccination_pct": [68.0, 72.0, 55.0, 60.0, 48.0],
+            "smoking_pct": [14.0, 22.0, 18.0, 16.0, 12.0],
+        }
+    )
+    _write_csv(PUBLIC_DIR / "health_demo.csv", health)
 
     sources = [
         PublicSource(
@@ -294,6 +334,41 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             offline=True,
         ),
         PublicSource(
+            id="climate_demo",
+            name="Climate / weather stub",
+            domain="climate",
+            access="bundled",
+            license_note="Synthetic MIT-licensed fixture (not real climate data).",
+            description="Region-year temperature anomaly, precip, CO2 index, extreme events.",
+            path="climate_demo.csv",
+            schema_summary=[
+                {"column": "region", "dtype": "str"},
+                {"column": "year", "dtype": "int"},
+                {"column": "temp_anomaly", "dtype": "float"},
+                {"column": "co2_index", "dtype": "float"},
+            ],
+            suggested_join_keys=["region", "year"],
+            rows_approx=len(climate),
+            offline=True,
+        ),
+        PublicSource(
+            id="health_demo",
+            name="Health indicators by region",
+            domain="health",
+            access="bundled",
+            license_note="Synthetic MIT-licensed fixture (illustrative numbers).",
+            description="Region-level life expectancy, beds, vaccination, smoking.",
+            path="health_demo.csv",
+            schema_summary=[
+                {"column": "region", "dtype": "str"},
+                {"column": "life_expectancy", "dtype": "float"},
+                {"column": "vaccination_pct", "dtype": "float"},
+            ],
+            suggested_join_keys=["region"],
+            rows_approx=len(health),
+            offline=True,
+        ),
+        PublicSource(
             id="iris_open",
             name="Iris (open CSV mirror)",
             domain="demo",
@@ -307,6 +382,23 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             ],
             suggested_join_keys=[],
             rows_approx=150,
+            offline=False,
+        ),
+        PublicSource(
+            id="gapminder_open",
+            name="Gapminder life expectancy (open CSV)",
+            domain="demographics",
+            access="download",
+            license_note="Gapminder open data; cite Gapminder when publishing.",
+            description="Optional network download — soft-fails offline.",
+            url="https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
+            schema_summary=[
+                {"column": "country", "dtype": "str"},
+                {"column": "year", "dtype": "int"},
+                {"column": "lifeExp", "dtype": "float"},
+            ],
+            suggested_join_keys=["year"],
+            rows_approx=1704,
             offline=False,
         ),
         PublicSource(
@@ -326,7 +418,7 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
     ]
 
     payload = {
-        "version": 1,
+        "version": 2,
         "description": "AutoCausalLib public / demo dataset suite",
         "sources": [s.to_dict() for s in sources],
     }
@@ -528,4 +620,126 @@ def join_public_frames(
                 "cols_added": len(out.columns) - before,
             }
         )
+    return out, log
+
+
+def join_public_corpus(
+    public_ids: str | list[str],
+    *,
+    on: Optional[str | list[str]] = None,
+    how: str = "outer",
+    allow_network: bool = False,
+    base: Optional[pd.DataFrame] = None,
+    base_label: Optional[str] = None,
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    """Join multiple public suite tables into one mining corpus.
+
+    If ``base`` is provided, left-join public tables into it (same as
+    :func:`join_public_frames`). Otherwise the first successfully loaded
+    public id becomes the base frame and subsequent ids are joined on
+    suggested keys (default ``how='outer'`` for multi-source demos).
+    """
+    if isinstance(public_ids, str):
+        ids = [x.strip() for x in public_ids.split(",") if x.strip()]
+    else:
+        ids = list(public_ids)
+
+    if not ids and base is None:
+        return pd.DataFrame(), [{"id": None, "ok": False, "error": "no sources"}]
+
+    if base is not None:
+        joined, log = join_public_frames(
+            base,
+            ids,
+            on=on,
+            how=how if how != "outer" else "left",
+            allow_network=allow_network,
+        )
+        if base_label:
+            log.insert(0, {"id": base_label, "ok": True, "keys": [], "how": "base", "rows": len(base)})
+        return joined, log
+
+    log: list[dict[str, Any]] = []
+    out: Optional[pd.DataFrame] = None
+    for pid in ids:
+        try:
+            right = load_public(pid, allow_network=allow_network)
+        except Exception as e:
+            log.append({"id": pid, "ok": False, "error": str(e)})
+            continue
+
+        if out is None:
+            out = right.copy()
+            log.append(
+                {
+                    "id": pid,
+                    "ok": True,
+                    "keys": [],
+                    "how": "base",
+                    "rows": len(out),
+                    "cols_added": len(out.columns),
+                }
+            )
+            continue
+
+        src = get_public(pid)
+        if on is None:
+            keys = suggest_join_keys(out, right, hints=src.suggested_join_keys)
+            # prefer region (+ year when both have it) for multi-domain corpus demos
+            if "region" in out.columns and "region" in right.columns:
+                if "year" in out.columns and "year" in right.columns:
+                    keys = ["region", "year"]
+                else:
+                    keys = ["region"]
+        elif isinstance(on, str):
+            keys = [on]
+        else:
+            keys = list(on)
+
+        if not keys:
+            log.append(
+                {
+                    "id": pid,
+                    "ok": False,
+                    "error": "no join keys found; pass on=...",
+                    "right_columns": list(map(str, right.columns)),
+                }
+            )
+            continue
+
+        missing_l = [k for k in keys if k not in out.columns]
+        missing_r = [k for k in keys if k not in right.columns]
+        if missing_l or missing_r:
+            # fall back to region-only if possible
+            if "region" in out.columns and "region" in right.columns:
+                keys = ["region"]
+            else:
+                log.append(
+                    {
+                        "id": pid,
+                        "ok": False,
+                        "error": f"join keys missing left={missing_l} right={missing_r}",
+                        "keys": keys,
+                    }
+                )
+                continue
+
+        before = len(out.columns)
+        # drop duplicate non-key columns from right to reduce suffix noise
+        drop_cols = [c for c in right.columns if c in out.columns and c not in keys]
+        right_clean = right.drop(columns=drop_cols, errors="ignore")
+        out = out.merge(right_clean, on=keys, how=how, suffixes=("", f"_{pid}"))
+        log.append(
+            {
+                "id": pid,
+                "ok": True,
+                "keys": keys,
+                "how": how,
+                "rows": len(out),
+                "cols_added": len(out.columns) - before,
+            }
+        )
+
+    if out is None:
+        return pd.DataFrame(), log
     return out, log

@@ -37,6 +37,8 @@ class AutoCausal:
         self.inference_result: Any = None
         self.grounding: Any = None
         self.physics_result: Any = None
+        self.nlp_hints: Any = None
+        self.behavioral_result: Any = None
         self.join_log: list[dict[str, Any]] = []
         self.roles: dict[str, ColumnRole] = infer_column_roles(self._df)
 
@@ -116,6 +118,41 @@ class AutoCausal:
         self.roles = infer_column_roles(self._df)
         self.source = f"{self.source}+join:{public_id}"
         return self
+
+    @classmethod
+    def mine_public(
+        cls,
+        sources: Optional[Union[str, list[str]]] = None,
+        *,
+        join_on: Optional[Union[str, list[str]]] = None,
+        how: str = "outer",
+        allow_network: bool = False,
+        discover: bool = True,
+        use_iv: bool = True,
+        min_score: float = 0.15,
+        min_abs_corr: float = 0.12,
+        validate: bool = False,
+        base: Optional[pd.DataFrame] = None,
+    ) -> Any:
+        """Mine + discover causal edges across public suite sources.
+
+        Returns a :class:`~autocausal.public_causal.PublicCausalReport`.
+        See also :class:`~autocausal.public_causal.PublicCausalMiner`.
+        """
+        from autocausal.public_causal import mine_public
+
+        return mine_public(
+            sources,
+            join_on=join_on,
+            how=how,
+            allow_network=allow_network,
+            discover=discover,
+            use_iv=use_iv,
+            min_score=min_score,
+            min_abs_corr=min_abs_corr,
+            validate=validate,
+            base=base,
+        )
 
     def mine(self, *, min_score: float = 0.15) -> "AutoCausal":
         from autocausal.mining import mine
@@ -407,6 +444,138 @@ class AutoCausal:
             guides=guides,
             horizon=horizon,
             physics=physics,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_text_hints(
+        cls,
+        text: str,
+        *,
+        apply_guide: bool = False,
+        use_slm: bool = False,
+    ) -> "AutoCausal":
+        """Build an empty-frame AutoCausal seeded with NLP causal hints.
+
+        Prefer the library API directly for apps::
+
+            from autocausal.nlp import extract_causal_hints_from_text
+            hints = extract_causal_hints_from_text(text)
+
+        This facade stores hints on ``.nlp_hints`` and optionally runs ``guide``.
+        """
+        from autocausal.nlp import TextCausalHints
+
+        hints = TextCausalHints.extract(text)
+        # Minimal placeholder frame so mine/discover are not required
+        df = pd.DataFrame({"_nlp_seed": [0]})
+        ac = cls(df, source="text_hints")
+        ac.nlp_hints = hints
+        if apply_guide:
+            # Guide with text only — mining on seed frame is uninformative
+            from autocausal.slm import guide_pipeline
+
+            ac.guide_result = guide_pipeline(
+                hints.to_guide_context(), use_slm=use_slm
+            )
+        return ac
+
+    def apply_text_features(
+        self,
+        text_col: str,
+        *,
+        prefix: str = "nlp_",
+        drop_text: bool = False,
+    ) -> "AutoCausal":
+        """Append NLP feature columns from ``text_col`` onto the current frame."""
+        from autocausal.nlp import NlpFeatureBuilder
+
+        builder = NlpFeatureBuilder(prefix=prefix)
+        self._df = builder.transform_frame(self._df, text_col, drop_text=drop_text)
+        self.roles = infer_column_roles(self._df)
+        self.source = f"{self.source}+nlp_features:{text_col}"
+        return self
+
+    @classmethod
+    def mine_behavioral_traces(
+        cls,
+        source: Union[str, Path] = "habit_loop",
+        *,
+        discover: bool = False,
+        min_score: float = 0.15,
+        **discover_kwargs: Any,
+    ) -> Any:
+        """Mine bundled/file behavioral traces → panel → report.
+
+        Library equivalent::
+
+            from autocausal.behavioral import mine_behavioral_traces
+            result = mine_behavioral_traces("habit_loop", discover=True)
+        """
+        from autocausal.behavioral import mine_behavioral_traces as _mine
+
+        return _mine(
+            source,
+            discover=discover,
+            min_score=min_score,
+            **discover_kwargs,
+        )
+
+    def attach_behavioral(
+        self,
+        source: Union[str, Path] = "habit_loop",
+        *,
+        on: str = "subject_id",
+        how: str = "left",
+        discover: bool = False,
+    ) -> "AutoCausal":
+        """Join a behavioral demo/file panel into the current frame and optionally discover."""
+        from autocausal.behavioral import BehavioralTraceStore, join_traces_to_frame
+
+        store = (
+            BehavioralTraceStore.from_demo(str(source))
+            if str(source) in ("habit_loop", "nudge_ab", "reinforcement_schedule")
+            else BehavioralTraceStore.from_csv(source)
+        )
+        joined, log = join_traces_to_frame(self._df, store.collection, on=on, how=how)
+        self._df = joined
+        self.join_log.extend(log)
+        self.roles = infer_column_roles(self._df)
+        self.behavioral_result = store.mine(discover=discover) if discover else None
+        self.source = f"{self.source}+behavioral:{store.name}"
+        return self
+
+    def insight_loop(
+        self,
+        *,
+        text: str = "",
+        use_slm: Optional[bool] = None,
+        model_name: Optional[str] = None,
+        join: Optional[Union[str, list[str]]] = None,
+        join_on: Optional[Union[str, list[str]]] = None,
+        guide_backends: Optional[list[str]] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Run insight suite over this instance → ``InsightReport``.
+
+        Prefer the library API in apps::
+
+            from autocausal.insight import InsightSuite, run_insight_loop
+            report = InsightSuite.from_autocausal(ac).run(use_slm=False)
+        """
+        from autocausal.insight import InsightSuite
+
+        suite = InsightSuite.from_autocausal(
+            self,
+            use_slm=bool(use_slm) if use_slm is not None else False,
+            model_name=model_name,
+            guide_backends=guide_backends,
+        )
+        return suite.run(
+            text=text,
+            use_slm=use_slm,
+            join=join,
+            join_on=join_on,
             **kwargs,
         )
 

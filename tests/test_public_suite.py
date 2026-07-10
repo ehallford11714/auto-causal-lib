@@ -30,6 +30,8 @@ def test_list_and_load_bundled():
     assert "demographics_demo" in ids
     assert "vision_stub" in ids
     assert "instruments_demo" in ids
+    assert "climate_demo" in ids
+    assert "health_demo" in ids
     df = load_public("demographics_demo", allow_network=False)
     assert "region" in df.columns
     assert len(df) >= 3

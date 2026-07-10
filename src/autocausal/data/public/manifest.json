@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "description": "AutoCausalLib public / demo dataset suite",
   "sources": [
     {
@@ -247,6 +247,73 @@
       "offline": true
     },
     {
+      "id": "climate_demo",
+      "name": "Climate / weather stub",
+      "domain": "climate",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture (not real climate data).",
+      "description": "Region-year temperature anomaly, precip, CO2 index, extreme events.",
+      "path": "climate_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "year",
+          "dtype": "int"
+        },
+        {
+          "column": "temp_anomaly",
+          "dtype": "float"
+        },
+        {
+          "column": "co2_index",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "region",
+        "year"
+      ],
+      "rows_approx": 15,
+      "offline": true
+    },
+    {
+      "id": "health_demo",
+      "name": "Health indicators by region",
+      "domain": "health",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture (illustrative numbers).",
+      "description": "Region-level life expectancy, beds, vaccination, smoking.",
+      "path": "health_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "region",
+          "dtype": "str"
+        },
+        {
+          "column": "life_expectancy",
+          "dtype": "float"
+        },
+        {
+          "column": "vaccination_pct",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "region"
+      ],
+      "rows_approx": 5,
+      "offline": true
+    },
+    {
       "id": "iris_open",
       "name": "Iris (open CSV mirror)",
       "domain": "demo",
@@ -269,6 +336,37 @@
       ],
       "suggested_join_keys": [],
       "rows_approx": 150,
+      "offline": false
+    },
+    {
+      "id": "gapminder_open",
+      "name": "Gapminder life expectancy (open CSV)",
+      "domain": "demographics",
+      "access": "download",
+      "license_note": "Gapminder open data; cite Gapminder when publishing.",
+      "description": "Optional network download \u2014 soft-fails offline.",
+      "path": null,
+      "url": "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "country",
+          "dtype": "str"
+        },
+        {
+          "column": "year",
+          "dtype": "int"
+        },
+        {
+          "column": "lifeExp",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [
+        "year"
+      ],
+      "rows_approx": 1704,
       "offline": false
     },
     {

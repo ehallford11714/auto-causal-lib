@@ -28,6 +28,10 @@ __all__ = [
     "extract_causal_hints_from_text",
     "BehavioralTraceStore",
     "mine_behavioral_traces",
+    "InsightSuite",
+    "InsightReport",
+    "ExperimentRecommender",
+    "run_insight_loop",
 ]
 
 
@@ -60,4 +64,15 @@ def __getattr__(name: str):
         from autocausal import behavioral as _beh
 
         return getattr(_beh, name)
+    if name in (
+        "InsightSuite",
+        "InsightReport",
+        "ExperimentRecommender",
+        "run_insight_loop",
+        "run_slm_research_loop",
+        "demo_insight",
+    ):
+        from autocausal import insight as _insight
+
+        return getattr(_insight, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

@@ -18,7 +18,10 @@ python -m autocausal public load demographics_demo -o demo.csv
 | `demographics_demo` | bundled | demographics | `region` | Region aggregates |
 | `vision_stub` | bundled | vision | `region`, `clip_id` | Motion / frame stub |
 | `instruments_demo` | bundled | policy | `user_id`, `region` | IV assignment table |
+| `climate_demo` | bundled | climate | `region`, `year` | Temp / precip / CO2 stub |
+| `health_demo` | bundled | health | `region` | Life expectancy / access stub |
 | `iris_open` | download | demo | — | Optional network CSV |
+| `gapminder_open` | download | demographics | `year` | Optional Gapminder CSV |
 | `public_pg_env` | sql_demo | sql_demo | — | `AUTOCAUSAL_PUBLIC_PG_URL` only |
 
 Bundled files live under `src/autocausal/data/public/` with `manifest.json`.  
@@ -60,5 +63,6 @@ Open downloads (Iris) follow their upstream open/educational terms — cite upst
 
 ## Related
 
+- **Public causal mining** (multi-source join → mine → discover): [PUBLIC_CAUSAL_MINING.md](PUBLIC_CAUSAL_MINING.md)
 - Connection matrix: [CONNECTIONS.md](CONNECTIONS.md)
 - Ping public targets: `python -m autocausal ping --public --no-network`
