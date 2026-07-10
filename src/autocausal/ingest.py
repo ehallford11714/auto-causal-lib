@@ -42,12 +42,25 @@ def load_sqlalchemy(
     query: Optional[str] = None,
     schema: Optional[str] = None,
     limit: Optional[int] = None,
+    chunksize: Optional[int] = None,
+    sample_n: Optional[int] = None,
+    sample_seed: Optional[int] = None,
     **engine_kwargs: Any,
 ) -> pd.DataFrame:
     """Load a table or SQL query via SQLAlchemy.
 
     Drivers are optional — only SQLAlchemy itself is required. Install dialect
     extras as documented in docs/CONNECTIONS.md.
+
+    Parameters
+    ----------
+    chunksize :
+        If set, stream rows in chunks and concatenate (memory-friendlier for large tables).
+    sample_n :
+        If set, randomly sample up to ``sample_n`` rows after load (or per-chunk reservoir
+        when combined with ``chunksize``). Exploratory — not a design-based sample.
+    sample_seed :
+        RNG seed for ``sample_n``.
     """
     if not table and not query:
         raise ValueError("Provide table=... or query=...")
@@ -73,13 +86,34 @@ def load_sqlalchemy(
             if limit is not None:
                 # Portable-ish LIMIT; dialects that need TOP should use query=
                 sql = f"{sql} LIMIT {int(limit)}"
-        # SQLAlchemy 2.x + some pandas builds disagree on connectable detection;
-        # execute explicitly then build a DataFrame (portable, offline-safe).
-        with engine.connect() as conn:
-            result = conn.execute(text(sql))
-            rows = result.fetchall()
-            cols = list(result.keys())
-        return pd.DataFrame(rows, columns=cols)
+
+        if chunksize is not None and int(chunksize) > 0:
+            chunks: list[pd.DataFrame] = []
+            with engine.connect() as conn:
+                result = conn.execute(text(sql))
+                cols = list(result.keys())
+                cs = int(chunksize)
+                while True:
+                    rows = result.fetchmany(cs)
+                    if not rows:
+                        break
+                    chunks.append(pd.DataFrame(rows, columns=cols))
+            if not chunks:
+                df = pd.DataFrame(columns=cols if "cols" in dir() else [])
+            else:
+                df = pd.concat(chunks, ignore_index=True)
+        else:
+            # SQLAlchemy 2.x + some pandas builds disagree on connectable detection;
+            # execute explicitly then build a DataFrame (portable, offline-safe).
+            with engine.connect() as conn:
+                result = conn.execute(text(sql))
+                rows = result.fetchall()
+                cols = list(result.keys())
+            df = pd.DataFrame(rows, columns=cols)
+
+        if sample_n is not None and int(sample_n) > 0 and len(df) > int(sample_n):
+            df = df.sample(n=int(sample_n), random_state=sample_seed).reset_index(drop=True)
+        return df
     finally:
         engine.dispose()
 

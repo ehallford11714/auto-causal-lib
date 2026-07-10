@@ -247,7 +247,7 @@ def ensure_example_datasets() -> Path:
 
 
 def _download_csv(url: str, timeout: float = 8.0) -> pd.DataFrame:
-    req = Request(url, headers={"User-Agent": "autocausal/0.7"})
+    req = Request(url, headers={"User-Agent": "autocausal/0.8"})
     with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — curated open URLs
         return pd.read_csv(resp)
 
@@ -278,6 +278,8 @@ def load_dataset(
     allow_network: bool = False,
     timeout: float = 8.0,
     prefer_network: bool = False,
+    use_cache: bool = True,
+    cache_dir: Optional[Path] = None,
 ) -> pd.DataFrame:
     """Load a bundled example dataset (offline by default).
 
@@ -291,9 +293,16 @@ def load_dataset(
     prefer_network:
         If True with ``allow_network``, try the network first; otherwise
         bundled-first (offline-first).
+    use_cache:
+        When a network fetch succeeds, write a local cache CSV under
+        ``cache_dir`` (default: ``EXAMPLES_DIR / .cache``).
+    cache_dir:
+        Optional override for the network cache directory.
     """
     meta = get_dataset(dataset_id)
     path = EXAMPLES_DIR / meta.filename
+    cache_root = Path(cache_dir) if cache_dir else (EXAMPLES_DIR / ".cache")
+    cache_path = cache_root / meta.filename
 
     def _from_bundle() -> pd.DataFrame:
         if not path.is_file():
@@ -302,49 +311,74 @@ def load_dataset(
             raise FileNotFoundError(f"Bundled dataset missing: {path}")
         return pd.read_csv(path)
 
+    def _from_cache() -> Optional[pd.DataFrame]:
+        if use_cache and cache_path.is_file():
+            try:
+                return pd.read_csv(cache_path)
+            except Exception:
+                return None
+        return None
+
+    def _write_cache(df: pd.DataFrame) -> None:
+        if not use_cache:
+            return
+        try:
+            cache_root.mkdir(parents=True, exist_ok=True)
+            df.to_csv(cache_path, index=False)
+        except Exception:
+            pass
+
+    def _normalize(df: pd.DataFrame) -> pd.DataFrame:
+        if meta.id == "iris":
+            return _normalize_iris_columns(df)
+        if meta.id == "titanic":
+            keep = [c for c in meta.columns if c in df.columns]
+            return df[keep] if keep else df
+        if meta.id == "gapminder_subset":
+            cols = [c for c in meta.columns if c in df.columns]
+            if cols:
+                df = df[cols]
+                if len(df) > 200 and "country" in df.columns:
+                    countries = {
+                        "Afghanistan",
+                        "Brazil",
+                        "China",
+                        "Egypt",
+                        "France",
+                        "Germany",
+                        "India",
+                        "Japan",
+                        "Nigeria",
+                        "United States",
+                        "United Kingdom",
+                        "Mexico",
+                    }
+                    df = df[df["country"].isin(countries)]
+            return df
+        return df
+
     if allow_network and meta.url and prefer_network:
         try:
-            df = _download_csv(meta.url, timeout=timeout)
-            if meta.id == "iris":
-                df = _normalize_iris_columns(df)
-            if meta.id == "titanic":
-                keep = [c for c in meta.columns if c in df.columns]
-                if keep:
-                    df = df[keep]
-            if meta.id == "gapminder_subset":
-                # keep a small educational slice if full Gapminder was fetched
-                cols = [c for c in meta.columns if c in df.columns]
-                if cols:
-                    df = df[cols]
-                    if len(df) > 200:
-                        countries = {
-                            "Afghanistan",
-                            "Brazil",
-                            "China",
-                            "Egypt",
-                            "France",
-                            "Germany",
-                            "India",
-                            "Japan",
-                            "Nigeria",
-                            "United States",
-                            "United Kingdom",
-                            "Mexico",
-                        }
-                        if "country" in df.columns:
-                            df = df[df["country"].isin(countries)]
+            df = _normalize(_download_csv(meta.url, timeout=timeout))
+            _write_cache(df)
             return df
         except Exception:
+            cached = _from_cache()
+            if cached is not None:
+                return cached
             return _from_bundle()
 
     if path.is_file():
         return _from_bundle()
 
+    cached = _from_cache()
+    if cached is not None:
+        return cached
+
     if allow_network and meta.url:
         try:
-            df = _download_csv(meta.url, timeout=timeout)
-            if meta.id == "iris":
-                df = _normalize_iris_columns(df)
+            df = _normalize(_download_csv(meta.url, timeout=timeout))
+            _write_cache(df)
             return df
         except Exception as e:
             raise RuntimeError(

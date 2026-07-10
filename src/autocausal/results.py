@@ -24,6 +24,11 @@ class DiscoveryResult:
     mining: Optional[dict[str, Any]] = None
     guide: Optional[dict[str, Any]] = None
     grounding: Optional[dict[str, Any]] = None
+    stability_enabled: bool = False
+    bootstrap_n: int = 0
+    ensemble_methods: list[str] = field(default_factory=list)
+    method_edges: Optional[dict[str, list[dict[str, Any]]]] = None
+    sensitivity: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         roles = {k: (v.value if hasattr(v, "value") else str(v)) for k, v in self.roles.items()}
@@ -34,15 +39,27 @@ class DiscoveryResult:
             "roles": roles,
             "candidates": self.candidates,
             "notes": self.notes,
+            "stability_enabled": self.stability_enabled,
+            "bootstrap_n": self.bootstrap_n,
         }
+        if self.ensemble_methods:
+            out["ensemble_methods"] = list(self.ensemble_methods)
+        if self.method_edges is not None:
+            out["method_edges"] = self.method_edges
         if self.imputation is not None:
-            out["imputation"] = asdict(self.imputation)
+            out["imputation"] = (
+                self.imputation.to_dict()
+                if hasattr(self.imputation, "to_dict")
+                else asdict(self.imputation)
+            )
         if self.mining is not None:
             out["mining"] = self.mining
         if self.guide is not None:
             out["guide"] = self.guide
         if self.grounding is not None:
             out["grounding"] = self.grounding
+        if self.sensitivity is not None:
+            out["sensitivity"] = self.sensitivity
         return out
 
     def to_json(self, indent: int = 2) -> str:
@@ -52,6 +69,18 @@ class DiscoveryResult:
         from autocausal.report import render_markdown_report
 
         return render_markdown_report(self)
+
+    def to_causal_edges(self) -> list[dict[str, Any]]:
+        """Export edges as CausalEdge.v1 envelopes (shared Fabric contract)."""
+        from autocausal.contracts import edges_to_causal_edge_envelopes
+
+        return edges_to_causal_edge_envelopes(self.edges)
+
+    def to_search_dag(self, *, soft: bool = True) -> dict[str, Any]:
+        """Soft-optional CausalSearch DAG export (SearchDAG.v1 envelope)."""
+        from autocausal.contracts import discovery_to_search_dag
+
+        return discovery_to_search_dag(self, soft=soft)
 
 
 @dataclass
@@ -68,6 +97,9 @@ class AutoResult:
     ping: Optional[dict[str, Any]] = None
     source: str = ""
     notes: list[str] = field(default_factory=list)
+    sensitivity: Optional[dict[str, Any]] = None
+    qc: Optional[dict[str, Any]] = None
+    nlp_hints: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +112,9 @@ class AutoResult:
             "direction_plan": self.direction_plan,
             "grounding": self.grounding,
             "physics": self.physics,
+            "sensitivity": self.sensitivity,
+            "qc": self.qc,
+            "nlp_hints": self.nlp_hints,
             "notes": self.notes,
         }
 
@@ -90,3 +125,25 @@ class AutoResult:
         from autocausal.report import render_auto_markdown
 
         return render_auto_markdown(self)
+
+    def to_fabric_bundle(
+        self,
+        *,
+        n_rows: int = 0,
+        n_cols: int = 0,
+        insight: Any = None,
+    ) -> dict[str, Any]:
+        """Assemble FabricBundle.v1 (MineReport + CausalEdges + optional InsightPack)."""
+        from autocausal.contracts import fabric_bundle
+
+        return fabric_bundle(
+            mining=self.mining,
+            discovery=self.discovery,
+            insight=insight,
+            n_rows=n_rows,
+            n_cols=n_cols,
+            source=self.source,
+            notes=list(self.notes),
+            sensitivity=self.sensitivity,
+            extra={"qc": self.qc, "nlp_hints": self.nlp_hints},
+        )

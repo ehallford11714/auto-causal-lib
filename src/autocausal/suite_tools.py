@@ -25,6 +25,8 @@ __all__ = [
     "invoke_tool",
     "validate_pipeline",
     "tool_catalog",
+    "refute",
+    "RefuteResult",
 ]
 
 
@@ -866,3 +868,202 @@ def validate_pipeline(
         notes=notes,
         tools_used=list(dict.fromkeys(tools_used)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Soft refute hooks (DoWhy / EconML / placebo stubs)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RefuteResult:
+    """Soft refutation outcome — never hard-fails on missing extras."""
+
+    ok: bool
+    method: str
+    backend: str
+    edge: dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+    error: Optional[str] = None
+    soft_skip: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def refute(
+    edge: Optional[dict[str, Any]] = None,
+    *,
+    method: str = "placebo",
+    df: Optional[pd.DataFrame] = None,
+    y: Optional[str] = None,
+    d: Optional[str] = None,
+    **kwargs: Any,
+) -> RefuteResult:
+    """Attempt a soft refutation of a discovered edge.
+
+    Methods
+    -------
+    placebo :
+        Shuffle the putative treatment and re-check association (builtin).
+    random_common_cause :
+        Add noise covariate stub (builtin).
+    dowhy :
+        Soft-call DoWhy refute if installed; else soft-skip.
+    econml :
+        Soft-call EconML sensitivity stub if installed; else soft-skip.
+
+    Always returns a :class:`RefuteResult` — missing heavy deps soft-skip.
+    """
+    edge = dict(edge or {})
+    src = str(edge.get("source") or d or "")
+    tgt = str(edge.get("target") or y or "")
+    notes = [
+        "Refutation is exploratory — passing/failing a stub does not prove/disprove causation.",
+    ]
+    method_l = (method or "placebo").lower().strip()
+
+    if method_l in ("dowhy", "dowhy_refute"):
+        mod = _soft_import("dowhy")
+        if mod is None:
+            return RefuteResult(
+                ok=True,
+                method=method_l,
+                backend="missing",
+                edge=edge,
+                soft_skip=True,
+                notes=notes
+                + ["DoWhy not installed — soft-skip. pip install 'autocausal[causal-extra]'"],
+            )
+        return RefuteResult(
+            ok=True,
+            method=method_l,
+            backend="dowhy",
+            edge=edge,
+            data={"status": "stub", "hint": "Wire CausalModel.refute_estimate in apps"},
+            notes=notes + ["DoWhy present; full refute wiring left to caller (soft stub)."],
+            soft_skip=True,
+        )
+
+    if method_l in ("econml", "econml_sensitivity"):
+        mod = _soft_import("econml")
+        if mod is None:
+            return RefuteResult(
+                ok=True,
+                method=method_l,
+                backend="missing",
+                edge=edge,
+                soft_skip=True,
+                notes=notes
+                + ["EconML not installed — soft-skip. pip install 'autocausal[causal-extra]'"],
+            )
+        return RefuteResult(
+            ok=True,
+            method=method_l,
+            backend="econml",
+            edge=edge,
+            data={"status": "stub", "hint": "Use EconML sensitivity analyzers in apps"},
+            notes=notes + ["EconML present; sensitivity left to caller (soft stub)."],
+            soft_skip=True,
+        )
+
+    if df is None or not src or not tgt or src not in df.columns or tgt not in df.columns:
+        return RefuteResult(
+            ok=True,
+            method=method_l,
+            backend="noop",
+            edge=edge,
+            soft_skip=True,
+            notes=notes + ["Insufficient frame/edge columns — soft no-op."],
+        )
+
+    try:
+        if method_l in ("placebo", "placebo_treatment"):
+            rng = np.random.default_rng(int(kwargs.get("seed", 0)))
+            work = df[[src, tgt]].dropna().copy()
+            if len(work) < 8:
+                return RefuteResult(
+                    ok=True,
+                    method=method_l,
+                    backend="builtin",
+                    edge=edge,
+                    soft_skip=True,
+                    notes=notes + ["Too few rows for placebo."],
+                )
+            base = float(pd.to_numeric(work[src], errors="coerce").corr(pd.to_numeric(work[tgt], errors="coerce")))
+            shuffled = work[src].to_numpy().copy()
+            rng.shuffle(shuffled)
+            work["_placebo"] = shuffled
+            plac = float(
+                pd.to_numeric(work["_placebo"], errors="coerce").corr(
+                    pd.to_numeric(work[tgt], errors="coerce")
+                )
+            )
+            # "passes" refute if placebo association much weaker
+            ratio = abs(plac) / (abs(base) + 1e-9)
+            passed = bool(np.isfinite(base) and ratio < 0.5)
+            return RefuteResult(
+                ok=True,
+                method=method_l,
+                backend="builtin",
+                edge=edge,
+                data={
+                    "base_corr": round(base, 4) if base == base else None,
+                    "placebo_corr": round(plac, 4) if plac == plac else None,
+                    "ratio": round(ratio, 4),
+                    "refute_passed": passed,
+                },
+                notes=notes
+                + [
+                    f"Placebo corr ratio={ratio:.3f}; "
+                    + ("association weakened under shuffle." if passed else "association persists — review."),
+                ],
+            )
+
+        if method_l in ("random_common_cause", "add_unobserved"):
+            work = df[[src, tgt]].dropna().copy()
+            rng = np.random.default_rng(int(kwargs.get("seed", 1)))
+            work["_noise"] = rng.normal(size=len(work))
+            # partial out noise (should barely change)
+            from numpy.linalg import lstsq
+
+            yv = pd.to_numeric(work[tgt], errors="coerce").to_numpy(dtype=float)
+            xv = pd.to_numeric(work[src], errors="coerce").to_numpy(dtype=float)
+            zv = work["_noise"].to_numpy(dtype=float)
+            X = np.column_stack([np.ones(len(work)), xv])
+            b0, *_ = lstsq(X, yv, rcond=None)
+            X2 = np.column_stack([np.ones(len(work)), xv, zv])
+            b1, *_ = lstsq(X2, yv, rcond=None)
+            delta = abs(float(b1[1]) - float(b0[1]))
+            return RefuteResult(
+                ok=True,
+                method=method_l,
+                backend="builtin",
+                edge=edge,
+                data={
+                    "coef_base": round(float(b0[1]), 4),
+                    "coef_with_noise": round(float(b1[1]), 4),
+                    "delta": round(delta, 4),
+                    "refute_passed": delta < 0.05 * (abs(float(b0[1])) + 1e-6) + 0.01,
+                },
+                notes=notes + ["Random common-cause stub — noise should not move coef much."],
+            )
+
+        return RefuteResult(
+            ok=True,
+            method=method_l,
+            backend="unknown",
+            edge=edge,
+            soft_skip=True,
+            notes=notes + [f"Unknown refute method {method_l!r} — soft-skip."],
+        )
+    except Exception as e:
+        return RefuteResult(
+            ok=False,
+            method=method_l,
+            backend="error",
+            edge=edge,
+            error=f"{type(e).__name__}: {e}",
+            notes=notes,
+        )

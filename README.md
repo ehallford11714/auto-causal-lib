@@ -24,6 +24,10 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Behavioral traces** (`autocausal.behavioral`) — habit/nudge/reinforcement demos → panel → mine/discover ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
 - **Public causal mining** — multi-source join of bundled/open datasets → mine → discover → report ([docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md))
 - **Insight suite** (`autocausal.insight`) — `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
+- **Fabric contracts** — `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
+- **Discovery stability & ensemble** — bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
+- **QC gate** — `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
+- **Panel / join / IV handoff** — `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks
 - Markdown / JSON reports and a CLI
 
 ## Install
@@ -68,6 +72,12 @@ ac = AutoCausal.from_csv("data.csv")
 result = ac.run()          # impute + discover
 print(ac.report())         # markdown
 print(result.to_json())    # graph + edges + candidates
+
+# 0.8: stability, QC, fabric, NLP→guide
+ac.enrich_from_text("Does spend cause sales?")
+result = ac.discover(stability=True, bootstrap_n=12, ensemble=True)
+print(ac.to_fabric_bundle()["schema"])  # FabricBundle.v1
+print(ac.to_causaliv_request()["schema"])
 
 # SLM/rule creation + inference
 print(ac.create(text="Does spend cause sales?").to_markdown())
@@ -281,6 +291,8 @@ Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these ca
 
 ## Docs
 
+- [Library API map (0.8+)](docs/LIBRARY_API.md)
+- [Roadmap (P1–P3 shipped)](docs/ROADMAP.md)
 - [Examples (Iris + real datasets)](docs/EXAMPLES.md)
 - [Dataset licenses & paths](DATASETS.md)
 - [Insight suite (library API + optional SLM)](docs/INSIGHT_SUITE.md)

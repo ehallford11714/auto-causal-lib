@@ -34,6 +34,11 @@ __all__ = [
     "run_insight_loop",
     "load_dataset",
     "list_datasets",
+    "validate_frame",
+    "QCReport",
+    "align",
+    "PanelSpec",
+    "refute",
 ]
 
 
@@ -42,7 +47,7 @@ def __getattr__(name: str):
         from autocausal import slm as _slm
 
         return getattr(_slm, name)
-    if name in ("list_tools", "validate_pipeline"):
+    if name in ("list_tools", "validate_pipeline", "refute"):
         from autocausal import suite_tools as _st
 
         return getattr(_st, name)
@@ -81,4 +86,16 @@ def __getattr__(name: str):
         from autocausal import datasets as _ds
 
         return getattr(_ds, name)
+    if name in ("validate_frame", "QCReport", "QCIssue"):
+        from autocausal import qc as _qc
+
+        return getattr(_qc, name)
+    if name in ("align", "AlignReport", "suggest_keys"):
+        from autocausal import join as _join
+
+        return getattr(_join, name)
+    if name in ("PanelSpec", "panel_lag", "panel_diff", "panel_within"):
+        from autocausal import panel as _panel
+
+        return getattr(_panel, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Sequence, Union
 
 import pandas as pd
 
-from autocausal.discovery import discover_relationships
+from autocausal.discovery import discover_ensemble, discover_relationships
 from autocausal.impute import ImputationReport, impute_dataframe
 from autocausal.ingest import load_csv, load_parquet, load_sqlalchemy
 from autocausal.results import AutoResult, DiscoveryResult
@@ -15,6 +15,7 @@ from autocausal.roles import ColumnRole, infer_column_roles
 
 
 ImputeMethod = Literal["auto", "median_mode", "knn"]
+QCMode = Literal["off", "warn", "block"]
 
 __all__ = ["AutoCausal", "DiscoveryResult", "AutoResult"]
 
@@ -41,6 +42,11 @@ class AutoCausal:
         self.behavioral_result: Any = None
         self.join_log: list[dict[str, Any]] = []
         self.roles: dict[str, ColumnRole] = infer_column_roles(self._df)
+        self.qc_report: Any = None
+        self.sensitivity_report: Any = None
+        self.panel_spec: Any = None
+        self.refute_results: list[Any] = []
+
 
     @classmethod
     def from_csv(cls, path: str | Path, **read_csv_kwargs: Any) -> "AutoCausal":
@@ -61,6 +67,9 @@ class AutoCausal:
         query: Optional[str] = None,
         schema: Optional[str] = None,
         limit: Optional[int] = None,
+        chunksize: Optional[int] = None,
+        sample_n: Optional[int] = None,
+        sample_seed: Optional[int] = None,
         **engine_kwargs: Any,
     ) -> "AutoCausal":
         df = load_sqlalchemy(
@@ -69,6 +78,9 @@ class AutoCausal:
             query=query,
             schema=schema,
             limit=limit,
+            chunksize=chunksize,
+            sample_n=sample_n,
+            sample_seed=sample_seed,
             **engine_kwargs,
         )
         label = table or (query[:40] + "…" if query and len(query) > 40 else query) or "sql"
@@ -154,6 +166,47 @@ class AutoCausal:
             base=base,
         )
 
+    def join_frames(
+        self,
+        *frames: pd.DataFrame,
+        keys: Optional[Union[str, list[str]]] = None,
+        how: str = "outer",
+    ) -> "AutoCausal":
+        """Generic multi-frame align into the current frame (see ``autocausal.join.align``)."""
+        from autocausal.join import align
+
+        all_frames = [self._df, *frames]
+        joined, report = align(all_frames, keys=keys, how=how)
+        self._df = joined
+        self.join_log.append(report.to_dict())
+        self.roles = infer_column_roles(self._df)
+        self.source = f"{self.source}+align:{report.keys}"
+        return self
+
+    def validate_qc(
+        self,
+        *,
+        key_columns: Optional[Sequence[str]] = None,
+        mode: QCMode = "warn",
+    ) -> Any:
+        """Run QC gate on the current frame. See ``autocausal.qc.validate_frame``."""
+        from autocausal.qc import validate_frame
+
+        report = validate_frame(self._df, key_columns=key_columns)
+        self.qc_report = report
+        if mode == "block" and report.blocked:
+            codes = [i.code for i in report.block_issues()]
+            raise ValueError(f"QC blocked discovery: {codes}. See ac.qc_report.")
+        return report
+
+    def enrich_from_text(self, text: str) -> "AutoCausal":
+        """Extract NLP causal hints and merge into guide/direct context."""
+        from autocausal.nlp import TextCausalHints
+
+        hints = TextCausalHints.extract(text or "")
+        self.nlp_hints = hints
+        return self
+
     def mine(self, *, min_score: float = 0.15) -> "AutoCausal":
         from autocausal.mining import mine
 
@@ -173,33 +226,85 @@ class AutoCausal:
         min_abs_corr: float = 0.15,
         use_iv: bool = True,
         focus_columns: Optional[list[str]] = None,
+        stability: bool = False,
+        bootstrap_n: int = 20,
+        ensemble: bool = False,
+        methods: Optional[list[str]] = None,
+        min_methods: int = 2,
+        qc: QCMode = "warn",
+        drop_id_columns: bool = True,
+        seed: int = 0,
     ) -> DiscoveryResult:
+        if qc != "off":
+            self.validate_qc(mode=qc)
+
         if self.imputation is None and self._df.isna().any().any():
             self.impute(method="auto")
         work = self._df
+        if drop_id_columns:
+            from autocausal.roles import ColumnRole as CR
+
+            roles_tmp = infer_column_roles(work)
+            keep_cols = [c for c, r in roles_tmp.items() if r != CR.ID]
+            if len(keep_cols) >= 2:
+                work = work[keep_cols]
         if focus_columns:
             keep = [c for c in focus_columns if c in work.columns]
-            # keep enough columns; fall back if too few
             if len(keep) >= 2:
                 work = work[keep]
-        self.roles = infer_column_roles(work if focus_columns else self._df)
-        result = discover_relationships(
-            work if focus_columns else self._df,
-            roles=self.roles,
-            alpha=alpha,
-            max_cond_size=max_cond_size,
-            min_abs_corr=min_abs_corr,
-            use_iv=use_iv,
-        )
+        self.roles = infer_column_roles(work)
+        if ensemble or methods:
+            result = discover_ensemble(
+                work,
+                roles=self.roles,
+                methods=methods,  # type: ignore[arg-type]
+                alpha=alpha,
+                max_cond_size=max_cond_size,
+                min_abs_corr=min_abs_corr,
+                use_iv=use_iv,
+                stability=stability,
+                bootstrap_n=bootstrap_n,
+                min_methods=min_methods,
+                seed=seed,
+            )
+        else:
+            result = discover_relationships(
+                work,
+                roles=self.roles,
+                alpha=alpha,
+                max_cond_size=max_cond_size,
+                min_abs_corr=min_abs_corr,
+                use_iv=use_iv,
+                stability=stability,
+                bootstrap_n=bootstrap_n,
+                seed=seed,
+            )
         result.imputation = self.imputation
         if self.mining is not None:
             result.mining = self.mining.to_dict() if hasattr(self.mining, "to_dict") else self.mining
+        if self.qc_report is not None:
+            result.notes = list(result.notes) + [
+                f"QC ok={self.qc_report.ok} issues={len(self.qc_report.issues)}"
+            ]
         self.result = result
         return result
 
+    def discover_ensemble(self, **kwargs: Any) -> DiscoveryResult:
+        """Multi-method consensus discovery (pc_lite + corr_skeleton + mi_stub)."""
+        kwargs.setdefault("ensemble", True)
+        return self.discover(**kwargs)
+
     def _guide_context(self, text: Optional[str] = None) -> dict[str, Any]:
-        return {
-            "text": text or "",
+        if text and self.nlp_hints is None:
+            self.enrich_from_text(text)
+        elif text and self.nlp_hints is not None:
+            # refresh if new text provided
+            prev = getattr(self.nlp_hints, "text", None)
+            if prev != text:
+                self.enrich_from_text(text)
+
+        ctx: dict[str, Any] = {
+            "text": text or (getattr(self.nlp_hints, "text", "") if self.nlp_hints else ""),
             "columns": (
                 self.mining.columns
                 if self.mining is not None
@@ -209,6 +314,37 @@ class AutoCausal:
             "edges": self.result.edges if self.result is not None else [],
             "candidates": self.result.candidates if self.result is not None else {},
         }
+        if self.nlp_hints is not None:
+            nlp_ctx = (
+                self.nlp_hints.to_guide_context()
+                if hasattr(self.nlp_hints, "to_guide_context")
+                else {}
+            )
+            # merge NLP candidates into guide context without clobbering discovery candidates
+            ctx["nlp_hints"] = (
+                self.nlp_hints.to_dict() if hasattr(self.nlp_hints, "to_dict") else self.nlp_hints
+            )
+            nlp_cands = nlp_ctx.get("candidates") or {}
+            merged = dict(ctx.get("candidates") or {})
+            for role, items in nlp_cands.items():
+                # normalize plural keys from NLP
+                key = {
+                    "confounders": "confounder",
+                    "instruments": "instrument",
+                }.get(role, role)
+                existing = list(merged.get(key) or [])
+                for item in items or []:
+                    if item not in existing:
+                        existing.append(item)
+                merged[key] = existing
+            ctx["candidates"] = merged
+            if nlp_ctx.get("focus_columns"):
+                ctx["focus_columns"] = nlp_ctx["focus_columns"]
+            ctx["modality_markers"] = nlp_ctx.get("modality_markers") or []
+            notes = list(ctx.get("notes") or [])
+            notes.extend(nlp_ctx.get("notes") or [])
+            ctx["notes"] = notes
+        return ctx
 
     def guide(
         self,
@@ -219,6 +355,8 @@ class AutoCausal:
         backends: Optional[list[str]] = None,
     ) -> Any:
         """Run guide backends; multi-backend when ``backends`` is set."""
+        if text:
+            self.enrich_from_text(text)
         context = self._guide_context(text)
         if backends:
             from autocausal.guides import direct
@@ -258,6 +396,8 @@ class AutoCausal:
         """
         from autocausal.guides import direct as run_direct
 
+        if text:
+            self.enrich_from_text(text)
         if self.mining is None:
             self.mine()
         if self.imputation is None and self._df.isna().any().any():
@@ -289,6 +429,172 @@ class AutoCausal:
                     self.result.guide["direction_plan"] = plan.to_dict()
         return plan
 
+    def sensitivity(
+        self,
+        *,
+        text: str = "",
+        domain: Optional[str] = None,
+        n_boot: int = 8,
+        seed: int = 0,
+    ) -> Any:
+        """Compute sensitivity metrics and attach to discovery / AutoResult."""
+        from autocausal.sensitivity import compute_sensitivity
+
+        edges = self.result.edges if self.result is not None else None
+        traj = None
+        if self.physics_result is not None:
+            traj = getattr(self.physics_result, "trajectory", None)
+        report = compute_sensitivity(
+            self._df,
+            edges=edges,
+            trajectory=traj,
+            text=text,
+            domain=domain,
+            n_boot=n_boot,
+            seed=seed,
+        )
+        self.sensitivity_report = report
+        if self.result is not None:
+            self.result.sensitivity = report.to_dict()
+            self.result.notes = list(self.result.notes) + report.to_mine_notes()
+        return report
+
+    def to_causaliv_request(
+        self,
+        *,
+        treatment: Optional[str] = None,
+        outcome: Optional[str] = None,
+        instrument: Optional[str] = None,
+        confounders: Optional[Sequence[str]] = None,
+    ) -> dict[str, Any]:
+        """Structured CausalIV handoff spec (soft if ``causaliv`` missing)."""
+        cands = self.result.candidates if self.result is not None else {}
+        y = outcome or (cands.get("outcome") or [None])[0]
+        d = treatment or (cands.get("treatment") or [None])[0]
+        z = instrument or (cands.get("instrument") or [None])[0]
+        w = list(confounders) if confounders is not None else list(cands.get("confounder") or [])
+
+        causaliv_available = False
+        try:
+            from importlib.util import find_spec
+
+            causaliv_available = find_spec("causaliv") is not None
+        except Exception:
+            causaliv_available = False
+
+        from autocausal.panel import iv_handoff_notes
+
+        spec = {
+            "schema": "CausalIVRequest.v1",
+            "produced_by": "autocausal",
+            "y": y,
+            "d": d,
+            "z": z,
+            "w": w,
+            "n_rows": len(self._df),
+            "columns": [str(c) for c in self._df.columns],
+            "edges": (self.result.edges[:20] if self.result is not None else []),
+            "causaliv_available": causaliv_available,
+            "notes": iv_handoff_notes(
+                treatment=d, outcome=y, instrument=z, confounders=w
+            ),
+            "soft": True,
+        }
+        return spec
+
+    def set_panel(
+        self,
+        entity: str,
+        time: str,
+        *,
+        treatment: Optional[str] = None,
+        outcome: Optional[str] = None,
+        covariates: Optional[Sequence[str]] = None,
+    ) -> "AutoCausal":
+        """Attach a :class:`~autocausal.panel.PanelSpec` and soft DiD notes."""
+        from autocausal.panel import PanelSpec, did_handoff_notes
+
+        spec = PanelSpec(
+            entity=entity,
+            time=time,
+            treatment=treatment,
+            outcome=outcome,
+            covariates=list(covariates or []),
+            notes=did_handoff_notes(
+                PanelSpec(
+                    entity=entity,
+                    time=time,
+                    treatment=treatment,
+                    outcome=outcome,
+                    covariates=list(covariates or []),
+                )
+            ),
+        )
+        problems = spec.validate(self._df)
+        if problems:
+            spec.notes = list(spec.notes) + [f"validate: {p}" for p in problems]
+        self.panel_spec = spec
+        return self
+
+    def panel_features(
+        self,
+        columns: Sequence[str],
+        *,
+        kind: Literal["lag", "diff", "within"] = "lag",
+        periods: int = 1,
+    ) -> Any:
+        """Create panel-aware lag/diff/within features (requires ``set_panel``)."""
+        from autocausal.panel import panel_diff, panel_lag, panel_within
+
+        if self.panel_spec is None:
+            raise ValueError("Call set_panel(entity, time) before panel_features().")
+        if kind == "diff":
+            feat = panel_diff(self._df, self.panel_spec, columns, periods=periods)
+        elif kind == "within":
+            feat = panel_within(self._df, self.panel_spec, columns)
+        else:
+            feat = panel_lag(self._df, self.panel_spec, columns, periods=periods)
+        self._df = feat.df
+        self.roles = infer_column_roles(self._df)
+        return feat
+
+    def refute(
+        self,
+        edge: Optional[dict[str, Any]] = None,
+        *,
+        method: str = "placebo",
+        **kwargs: Any,
+    ) -> Any:
+        """Soft refute hook (DoWhy/EconML/suite_tools) — no-ops gracefully."""
+        from autocausal.suite_tools import refute as suite_refute
+
+        if edge is None and self.result is not None and self.result.edges:
+            edge = self.result.edges[0]
+        result = suite_refute(edge or {}, method=method, df=self._df, **kwargs)
+        self.refute_results.append(result)
+        return result
+
+    def to_fabric_bundle(self, *, insight: Any = None) -> dict[str, Any]:
+        """Export MineReport + CausalEdges (+ optional InsightPack) Fabric bundle."""
+        from autocausal.contracts import fabric_bundle
+
+        return fabric_bundle(
+            mining=self.mining,
+            discovery=self.result,
+            insight=insight,
+            n_rows=len(self._df),
+            n_cols=len(self._df.columns),
+            source=self.source,
+            sensitivity=self.sensitivity_report,
+            extra={
+                "qc": self.qc_report.to_dict() if self.qc_report is not None else None,
+                "nlp_hints": (
+                    self.nlp_hints.to_dict()
+                    if self.nlp_hints is not None and hasattr(self.nlp_hints, "to_dict")
+                    else None
+                ),
+            },
+        )
     def create(
         self,
         *,
@@ -716,6 +1022,8 @@ class AutoCausal:
                     guide = ac.guide(text=text, use_slm=use_slm)
 
         grounding = ac.ground(use_web=use_web_ground)
+        sens = ac.sensitivity(text=text or "")
+        notes.append(f"sensitivity domain={sens.domain_hint}")
         auto_result = AutoResult(
             discovery=result,
             mining=mining.to_dict() if mining is not None and hasattr(mining, "to_dict") else mining,
@@ -727,5 +1035,8 @@ class AutoCausal:
             ping=ping_info.to_dict() if ping_info is not None else None,
             source=ac.source,
             notes=notes,
+            sensitivity=sens.to_dict(),
+            qc=ac.qc_report.to_dict() if ac.qc_report is not None else None,
+            nlp_hints=ac.nlp_hints.to_dict() if ac.nlp_hints is not None and hasattr(ac.nlp_hints, "to_dict") else None,
         )
         return auto_result

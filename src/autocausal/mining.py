@@ -30,12 +30,25 @@ class MiningReport:
     suggestions: list[dict[str, Any]]
     kpis: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    n_rows: int = 0
+    n_cols: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, default=str)
+
+    def to_mine_report(self, *, backend: str = "autocausal.mine") -> dict[str, Any]:
+        """Export as MineReport.v1 Fabric envelope."""
+        from autocausal.contracts import mining_to_mine_report
+
+        return mining_to_mine_report(
+            self,
+            n_rows=self.n_rows,
+            n_cols=self.n_cols or len(self.columns),
+            backend=backend,
+        )
 
     def to_markdown(self) -> str:
         lines = ["# AutoCausal mining report", ""]
@@ -338,4 +351,6 @@ def mine(
         suggestions=suggestions,
         kpis=kpis,
         notes=notes,
+        n_rows=int(profile.get("n_rows") or len(df)),
+        n_cols=int(profile.get("n_cols") or len(df.columns)),
     )
