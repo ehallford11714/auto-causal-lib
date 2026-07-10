@@ -1,4 +1,4 @@
-![Logo](assets/logo.svg)
+![AutoCausal](assets/autocausal-logo.png)
 
 # AutoCausalLib (`autocausal`)
 
