@@ -53,6 +53,7 @@ __all__ = [
     "SkillRegistry",
     "SLMToolBroker",
     "suite_tool_surface",
+    "AgentHook",
 ]
 
 
@@ -145,4 +146,8 @@ def __getattr__(name: str):
         from autocausal import skilling as _sk
 
         return getattr(_sk, name)
+    if name in ("AgentHook", "call_tool"):
+        from autocausal.connective import AgentHook, call_tool
+
+        return {"AgentHook": AgentHook, "call_tool": call_tool}[name]
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

@@ -25,6 +25,7 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Public causal mining** — multi-source join of bundled/open datasets → mine → discover → report ([docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md))
 - **Insight suite** (`autocausal.insight`) — `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
 - **Auto suites** (`autocausal.suites`) — **SLM-directed** `AutoCleanseSuite` / `AutoEDASuite` / `AutoMineSuite` with dedicated action modules + `autocausal.skilling` tool surface ([docs/SUITES.md](docs/SUITES.md), [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md))
+- **MCP connective** (`autocausal.mcp` / `autocausal.connective`) — Model Context Protocol stdio server + in-process `AgentHook` so other agents can load/cleanse/mine/discover/report ([docs/MCP.md](docs/MCP.md))
 - **Fabric contracts** — `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
 - **Discovery stability & ensemble** — bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
 - **QC gate** — `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
@@ -47,6 +48,7 @@ pip install -e ".[streamlit]"    # alias for [ui]
 pip install -e ".[postgres]"
 pip install -e ".[vertica]"
 pip install -e ".[mysql,duckdb,parquet]"
+pip install -e ".[mcp]"         # MCP stdio server for other agents
 ```
 
 Env:
@@ -210,6 +212,43 @@ python -m autocausal suite mine --csv data.csv --format json -o mine.json
 
 See [docs/SUITES.md](docs/SUITES.md) and [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md).
 
+### Use from other agents (MCP)
+
+Expose AutoCausal as MCP tools for Cursor, Claude Desktop, and other MCP clients — or call the same surface in-process via `AgentHook` (no `mcp` SDK required).
+
+```bash
+pip install -e ".[mcp]"
+python -m autocausal.mcp          # stdio server
+# or: autocausal-mcp
+```
+
+Cursor / Claude Desktop stdio config:
+
+```json
+{
+  "mcpServers": {
+    "autocausal": {
+      "command": "python",
+      "args": ["-m", "autocausal.mcp"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}
+```
+
+Library-first (scripts / non-MCP agents):
+
+```python
+from autocausal.connective import AgentHook
+
+hook = AgentHook()
+hook.call_tool("autocausal_load_dataset", {"dataset_id": "iris"})
+hook.call_tool("autocausal_discover", {"use_iv": False})
+print(hook.call_tool("autocausal_report", {"format": "markdown"})["markdown"][:400])
+```
+
+Tools include `autocausal_load_dataset`, `autocausal_from_csv`, `autocausal_cleanse` / `eda` / `mine`, `autocausal_discover`, `autocausal_insight_loop`, `autocausal_recommend_experiments`, `autocausal_public_mine`, `autocausal_report`, `autocausal_list_datasets`, `autocausal_skilling_list`. Soft-fail if optional suites are missing. Full setup: [docs/MCP.md](docs/MCP.md).
+
 ### Insight suite (library-first)
 
 ```python
@@ -322,6 +361,7 @@ Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these ca
 - [Insight suite (library API + optional SLM)](docs/INSIGHT_SUITE.md)
 - [Auto suites — Cleanse / EDA / Mine (SLM-directed)](docs/SUITES.md)
 - [SLM skilling / tool surface](docs/SLM_SKILLING.md)
+- [MCP connective (agents / Cursor / Claude)](docs/MCP.md)
 - [Public causal mining (multi-source join)](docs/PUBLIC_CAUSAL_MINING.md)
 - [NLP & behavioral traces (library API)](docs/NLP_AND_BEHAVIORAL_TRACES.md)
 - [KPI ML loop (SLM → PyTorch)](docs/ML_KPI_LOOP.md)
