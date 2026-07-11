@@ -81,6 +81,9 @@ from autocausal.qc import validate_frame
 ac.validate_qc(mode="warn")
 ac.enrich_from_text("Does spend cause sales?")
 ac.to_fabric_bundle()
+result.to_fabric_bundle()   # same contracts from DiscoveryResult
+result.to_causal_edges()
+result.to_search_dag()
 ac.to_causaliv_request()
 ac.set_panel("unit_id", "year", outcome="y")
 ac.panel_features(["y"], kind="lag")

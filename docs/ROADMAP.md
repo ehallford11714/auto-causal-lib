@@ -1,5 +1,10 @@
 # AutoCausalLib roadmap
 
+## Shipped in 0.11.3 — DiscoveryResult fabric exports
+
+- [x] `DiscoveryResult.to_fabric_bundle()` / `to_mine_report()` (aliases matching AutoCausal / AutoResult)
+- [x] `AutoResult.to_causal_edges()` / `to_search_dag()` / `to_mine_report()`
+
 ## Shipped in 0.11.1 — docs + packaging
 
 - [x] Comprehensive docs: INDEX / MODULES / CLI / MCP / LIBRARY_API / CAUSAL_BACKENDS
@@ -21,7 +26,7 @@
 
 ### Priority 1 — library credibility
 - [x] Fabric contracts (`MineReport` / `CausalEdge` / `FabricBundle` / `SearchDAG`) via `autocausal.contracts`
-- [x] `MiningReport.to_mine_report()`, `DiscoveryResult.to_causal_edges()`, `AutoResult.to_fabric_bundle()`
+- [x] `MiningReport.to_mine_report()`, `DiscoveryResult.to_causal_edges()` / `to_fabric_bundle()`, `AutoResult.to_fabric_bundle()`
 - [x] Discovery stability (`discover(stability=True, bootstrap_n=…)`) with honest confidence
 - [x] QC gate (`autocausal.qc.validate_frame` → `QCReport`; hooked on `discover`)
 - [x] NLP wired into guide/direct (`enrich_from_text`)

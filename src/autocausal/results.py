@@ -85,11 +85,59 @@ class DiscoveryResult:
 
         return edges_to_causal_edge_envelopes(self.edges)
 
+    def to_mine_report(
+        self,
+        *,
+        n_rows: int = 0,
+        n_cols: int = 0,
+        backend: str = "autocausal.mine",
+    ) -> dict[str, Any]:
+        """Export attached mining (if any) as a MineReport.v1 envelope."""
+        from autocausal.contracts import mining_to_mine_report
+
+        return mining_to_mine_report(
+            self.mining,
+            n_rows=n_rows,
+            n_cols=n_cols,
+            backend=backend,
+        )
+
     def to_search_dag(self, *, soft: bool = True) -> dict[str, Any]:
         """Soft-optional CausalSearch DAG export (SearchDAG.v1 envelope)."""
         from autocausal.contracts import discovery_to_search_dag
 
         return discovery_to_search_dag(self, soft=soft)
+
+    def to_fabric_bundle(
+        self,
+        *,
+        n_rows: int = 0,
+        n_cols: int = 0,
+        insight: Any = None,
+        source: str = "",
+        notes: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """Assemble FabricBundle.v1 from this discovery (+ attached mining).
+
+        Prefer ``ac.to_fabric_bundle()`` when you still have the ``AutoCausal``
+        session (includes frame shape / QC). This method lets callers export
+        directly from a ``DiscoveryResult``::
+
+            result = ac.discover()
+            bundle = result.to_fabric_bundle()
+        """
+        from autocausal.contracts import fabric_bundle
+
+        return fabric_bundle(
+            mining=self.mining,
+            discovery=self,
+            insight=insight,
+            n_rows=n_rows,
+            n_cols=n_cols,
+            source=source,
+            notes=list(notes or []) + list(self.notes or []),
+            sensitivity=self.sensitivity,
+        )
 
 
 @dataclass
@@ -141,6 +189,31 @@ class AutoResult:
             return self.to_markdown()
         return self.to_json()
 
+    def to_causal_edges(self) -> list[dict[str, Any]]:
+        """Export discovery edges as CausalEdge.v1 envelopes."""
+        return self.discovery.to_causal_edges()
+
+    def to_mine_report(
+        self,
+        *,
+        n_rows: int = 0,
+        n_cols: int = 0,
+        backend: str = "autocausal.mine",
+    ) -> dict[str, Any]:
+        """Export mining as a MineReport.v1 envelope."""
+        from autocausal.contracts import mining_to_mine_report
+
+        return mining_to_mine_report(
+            self.mining if self.mining is not None else self.discovery.mining,
+            n_rows=n_rows,
+            n_cols=n_cols,
+            backend=backend,
+        )
+
+    def to_search_dag(self, *, soft: bool = True) -> dict[str, Any]:
+        """Soft-optional CausalSearch DAG export (SearchDAG.v1 envelope)."""
+        return self.discovery.to_search_dag(soft=soft)
+
     def to_fabric_bundle(
         self,
         *,
@@ -152,7 +225,7 @@ class AutoResult:
         from autocausal.contracts import fabric_bundle
 
         return fabric_bundle(
-            mining=self.mining,
+            mining=self.mining if self.mining is not None else self.discovery.mining,
             discovery=self.discovery,
             insight=insight,
             n_rows=n_rows,

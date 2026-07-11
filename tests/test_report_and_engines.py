@@ -25,8 +25,8 @@ def _toy_df(n: int = 60, seed: int = 1) -> pd.DataFrame:
     return pd.DataFrame({"z": z, "x": x, "y": y})
 
 
-def test_version_0_11_2():
-    assert __version__ == "0.11.2"
+def test_version_0_11_3():
+    assert __version__ == "0.11.3"
 
 
 def test_discovery_result_report_alias():
@@ -40,6 +40,41 @@ def test_discovery_result_report_alias():
     js = result.report(as_markdown=False)
     assert js.strip().startswith("{")
     assert js == result.to_json()
+
+
+def test_discovery_result_fabric_exports():
+    from autocausal.contracts.envelope import (
+        SCHEMA_CAUSAL_EDGE,
+        SCHEMA_FABRIC_BUNDLE,
+        SCHEMA_MINE_REPORT,
+        SCHEMA_SEARCH_DAG,
+    )
+
+    ac = AutoCausal.from_dataframe(_toy_df())
+    ac.mine()
+    result = ac.discover(qc="off", use_iv=False)
+
+    edges = result.to_causal_edges()
+    assert isinstance(edges, list)
+    if edges:
+        assert edges[0]["schema"] == SCHEMA_CAUSAL_EDGE
+
+    dag = result.to_search_dag()
+    assert dag["schema"] == SCHEMA_SEARCH_DAG
+
+    mine = result.to_mine_report(n_rows=len(ac._df), n_cols=len(ac._df.columns))
+    assert mine["schema"] == SCHEMA_MINE_REPORT
+
+    bundle = result.to_fabric_bundle(n_rows=len(ac._df), n_cols=len(ac._df.columns))
+    assert bundle["schema"] == SCHEMA_FABRIC_BUNDLE
+    assert bundle["payload"]["mine_report"]["schema"] == SCHEMA_MINE_REPORT
+    assert isinstance(bundle["payload"]["causal_edges"], list)
+
+    auto = AutoResult(discovery=result, mining=result.mining, source="test")
+    assert auto.to_fabric_bundle(n_rows=60, n_cols=3)["schema"] == SCHEMA_FABRIC_BUNDLE
+    assert auto.to_causal_edges() == result.to_causal_edges()
+    assert auto.to_search_dag()["schema"] == SCHEMA_SEARCH_DAG
+    assert auto.to_mine_report(n_rows=60, n_cols=3)["schema"] == SCHEMA_MINE_REPORT
 
 
 def test_auto_causal_report_after_discover():
