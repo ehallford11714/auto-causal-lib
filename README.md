@@ -1,8 +1,8 @@
 ![AutoCausal](assets/autocausal-logo.png)
 
-# AutoCausalLib (`autocausal`)
+# AutoCausalLib (`auto-causal-lib` / `import autocausal`)
 
-Automatically **impute** missing tabular fields and discover *exploratory* causal relationships from CSV / Parquet and SQL databases — with optional **SLM-aided creation/inference**, a shared **tool suite**, and a **physics predictive / autocausal loop** for physical insight grounding.
+Automatically **impute** missing tabular fields and discover *exploratory* causal relationships from CSV / Parquet and SQL databases - with optional **SLM-aided creation/inference**, a shared **tool suite**, and a **physics predictive / autocausal loop** for physical insight grounding.
 
 > Scope is intentionally small: impute → role inference → PC-lite / score edges → optional IV → optional physics rollout.  
 > This is **not** a full AutoML OS and does **not** guarantee causal identification.
@@ -13,44 +13,53 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - Auto-imputation (`median_mode`, `knn`, or `auto`) with strategy reporting
 - Role inference (treatment / outcome / instrument / confounder candidates)
 - Exploratory discovery: PC-lite + scored edges + optional 2SLS
-- **Mining** — column profiles, associations, KPI hints
-- **SLM** — `RuleBackend` always; optional HuggingFace for *creation* (questions/Z/morphemes) and *inference* (narrative/caveats)
-- **Direction guides** — soft-optional `LLMIntent` / `retracement` / Kineteq pivot embeddings / **GRAIL** → `DirectionPlan` (see [docs/GUIDES.md](docs/GUIDES.md), [docs/GRAIL.md](docs/GRAIL.md))
-- **GRAIL** (`autocausal.grail`) — embellished Kineteq Generative Reflective Agentic Imputation Loop; live MCP/module when configured, rich offline stub otherwise; MCP tools `autocausal_grail_*`
-- **suite_tools** — registry of causal/NLP/KPI/validation adapters (NLTK, gensim, DoWhy stubs, …)
-- **Physics loop** — analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`, optional **Streamlit demo** (`physics ui`)
-- **KPI ML loop** — SLM/Rule `ModelConstructPlan` → median/sklearn/**PyTorch MLP** impute → discover → FitReport ([docs/ML_KPI_LOOP.md](docs/ML_KPI_LOOP.md))
-- **Isolates causal** — soft bridge to IntentIsolates layer motifs → indication vs IV ([docs/LAYER_CAUSAL_IV.md](docs/LAYER_CAUSAL_IV.md))
-- **NLP library** (`autocausal.nlp`) — soft-optional NLTK tokenize/POS/sentiment, `TextCausalHints`, `NlpFeatureBuilder` for apps/notebooks ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
-- **Behavioral traces** (`autocausal.behavioral`) — habit/nudge/reinforcement demos → panel → mine/discover ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
-- **Public causal mining** — multi-source join of bundled/open datasets → mine → discover → report ([docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md))
-- **Insight suite** (`autocausal.insight`) — `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
-- **Auto suites** (`autocausal.suites`) — **SLM-directed** `AutoCleanseSuite` / `AutoEDASuite` / `AutoMineSuite` with dedicated action modules + `autocausal.skilling` tool surface ([docs/SUITES.md](docs/SUITES.md), [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md))
-- **MCP connective** (`autocausal.mcp` / `autocausal.connective`) — Model Context Protocol stdio server + in-process `AgentHook` so other agents can load/cleanse/mine/discover/report ([docs/MCP.md](docs/MCP.md))
-- **Agentic loop** (`autocausal.agentic`) — SLM-guided cyclic FSM: hypothesize → skill → validate → compact → persist → route, with MEM1-inspired memory + ACON-inspired compaction ([docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md))
-- **Fabric contracts** — `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
-- **Discovery stability & ensemble** — bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
-- **QC gate** — `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
-- **Panel / join / IV handoff** — `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks
+- **Mining** - column profiles, associations, KPI hints
+- **SLM** - `RuleBackend` always; optional HuggingFace for *creation* (questions/Z/morphemes) and *inference* (narrative/caveats)
+- **Direction guides** - soft-optional `LLMIntent` / `retracement` / Kineteq pivot embeddings / **GRAIL** → `DirectionPlan` (see [docs/GUIDES.md](docs/GUIDES.md), [docs/GRAIL.md](docs/GRAIL.md))
+- **GRAIL** (`autocausal.grail`) - embellished Kineteq Generative Reflective Agentic Imputation Loop; live MCP/module when configured, rich offline stub otherwise; MCP tools `autocausal_grail_*`
+- **suite_tools** - registry of causal/NLP/KPI/validation adapters (NLTK, gensim, DoWhy stubs, …)
+- **Physics loop** - analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`, optional **Streamlit demo** (`physics ui`)
+- **KPI ML loop** - SLM/Rule `ModelConstructPlan` → median/sklearn/**PyTorch MLP** impute → discover → FitReport ([docs/ML_KPI_LOOP.md](docs/ML_KPI_LOOP.md))
+- **Isolates causal** - soft bridge to IntentIsolates layer motifs → indication vs IV ([docs/LAYER_CAUSAL_IV.md](docs/LAYER_CAUSAL_IV.md))
+- **NLP library** (`autocausal.nlp`) - soft-optional NLTK tokenize/POS/sentiment, `TextCausalHints`, `NlpFeatureBuilder` for apps/notebooks ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
+- **Behavioral traces** (`autocausal.behavioral`) - habit/nudge/reinforcement demos → panel → mine/discover ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
+- **Public causal mining** - multi-source join of bundled/open datasets → mine → discover → report ([docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md))
+- **Insight suite** (`autocausal.insight`) - `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
+- **Auto suites** (`autocausal.suites`) - **SLM-directed** `AutoCleanseSuite` / `AutoEDASuite` / `AutoMineSuite` with dedicated action modules + `autocausal.skilling` tool surface ([docs/SUITES.md](docs/SUITES.md), [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md))
+- **MCP connective** (`autocausal.mcp` / `autocausal.connective`) - Model Context Protocol stdio server + in-process `AgentHook` so other agents can load/cleanse/mine/discover/report ([docs/MCP.md](docs/MCP.md))
+- **Agentic loop** (`autocausal.agentic`) - SLM-guided cyclic FSM: hypothesize → skill → validate → compact → persist → route, with MEM1-inspired memory + ACON-inspired compaction ([docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md))
+- **Fabric contracts** - `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
+- **Discovery stability & ensemble** - bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
+- **QC gate** - `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
+- **Panel / join / IV handoff** - `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks
 - Markdown / JSON reports and a CLI
 
 ## Install
 
+From [PyPI](https://pypi.org/project/auto-causal-lib/):
+
+```bash
+pip install auto-causal-lib
+pip install "auto-causal-lib[all]"   # nlp + slm + mcp + ui + ml + causal-extra + web + drivers
+```
+
+Optional extras (soft deps; core works without them):
+
+```bash
+pip install "auto-causal-lib[nlp]"           # nltk + gensim
+pip install "auto-causal-lib[slm]"           # torch + transformers (lazy load)
+pip install "auto-causal-lib[mcp]"           # MCP stdio server for other agents
+pip install "auto-causal-lib[ui]"            # Streamlit physics demo (+ plotly)
+pip install "auto-causal-lib[ml]"            # torch + scikit-learn
+pip install "auto-causal-lib[causal-extra]"  # DoWhy / EconML
+pip install "auto-causal-lib[postgres]"      # and other DB drivers - see docs/CONNECTIONS.md
+```
+
+From source (development):
+
 ```bash
 cd research/AutoCausalLib
 pip install -e ".[dev]"
-
-# Optional
-pip install -e ".[slm]"          # torch + transformers (lazy load)
-pip install -e ".[torch]"        # torch only (KPI MLP imputer)
-pip install -e ".[ml]"           # torch + scikit-learn
-pip install -e ".[nlp]"          # nltk + gensim
-pip install -e ".[ui]"           # Streamlit physics demo (+ plotly)
-pip install -e ".[streamlit]"    # alias for [ui]
-pip install -e ".[postgres]"
-pip install -e ".[vertica]"
-pip install -e ".[mysql,duckdb,parquet]"
-pip install -e ".[mcp]"         # MCP stdio server for other agents
 ```
 
 Env:
@@ -92,7 +101,7 @@ print(ac.interpret().to_markdown())
 # Tool suite validation
 print(ac.validate_tools(y="y", d="d", z="z").to_markdown())
 
-# Direction steering (LLMIntent / retracement / Kineteq pivots / GRAIL — soft-optional)
+# Direction steering (LLMIntent / retracement / Kineteq pivots / GRAIL - soft-optional)
 plan = ac.direct(
     text="Does spend cause revenue?",
     backends=["llmintent", "retracement", "kineteq_pivot", "grail", "rule"],
@@ -124,7 +133,7 @@ print(ml.fit.to_markdown())
 
 ### Real dataset examples (offline)
 
-Bundled Iris, Wine, Titanic, Gapminder subset, Diabetes, and California housing sample — no network required. Licenses/attribution: [DATASETS.md](DATASETS.md). Full walkthrough: [docs/EXAMPLES.md](docs/EXAMPLES.md).
+Bundled Iris, Wine, Titanic, Gapminder subset, Diabetes, and California housing sample - no network required. Licenses/attribution: [DATASETS.md](DATASETS.md). Full walkthrough: [docs/EXAMPLES.md](docs/EXAMPLES.md).
 
 ```python
 from autocausal import AutoCausal, load_dataset
@@ -132,7 +141,7 @@ from autocausal import AutoCausal, load_dataset
 df = load_dataset("iris")  # Fisher Iris CSV from package data
 ac = AutoCausal(df)
 ac.mine().impute().discover(use_iv=False, min_abs_corr=0.2)
-print(ac.report())  # exploratory edges — not scientific flower-causation claims
+print(ac.report())  # exploratory edges - not scientific flower-causation claims
 ```
 
 ```bash
@@ -145,7 +154,7 @@ python -m autocausal insight demo --dataset iris --no-slm
 
 ### NLP hints & behavioral traces (library-first)
 
-These are **importable modules** for apps and notebooks — the CLI is optional.
+These are **importable modules** for apps and notebooks - the CLI is optional.
 
 ```python
 from autocausal.nlp import extract_causal_hints_from_text, NlpFeatureBuilder
@@ -197,7 +206,7 @@ python -m autocausal public causal --sources finance_demo,demographics_demo,heal
 
 See [docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md).
 
-### Auto suites — Cleanse / EDA / Mine (SLM-directed)
+### Auto suites - Cleanse / EDA / Mine (SLM-directed)
 
 Every **auto\*** path is directed by `SLMAutoDirector` when available; rules always work offline.
 
@@ -222,7 +231,7 @@ See [docs/SUITES.md](docs/SUITES.md) and [docs/SLM_SKILLING.md](docs/SLM_SKILLIN
 
 ### Agentic causal loop (library-first)
 
-SLM-guided cyclic research loop with compaction + constant-budget memory (SOTA-inspired APIs — not paper clones):
+SLM-guided cyclic research loop with compaction + constant-budget memory (SOTA-inspired APIs - not paper clones):
 
 ```python
 from autocausal import AutoCausal, load_dataset
@@ -239,7 +248,7 @@ See [docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md).
 
 ### Use from other agents (MCP)
 
-Expose AutoCausal as MCP tools for Cursor, Claude Desktop, and other MCP clients — or call the same surface in-process via `AgentHook` (no `mcp` SDK required).
+Expose AutoCausal as MCP tools for Cursor, Claude Desktop, and other MCP clients - or call the same surface in-process via `AgentHook` (no `mcp` SDK required).
 
 ```bash
 pip install -e ".[mcp]"
@@ -344,7 +353,7 @@ python -m autocausal auto --csv data.csv --slm
 
 ### Physics Streamlit demo
 
-Interactive UI for the physics autocausal loop (trajectory charts, edges, physical insights, energy proxies). Soft-optional — core mine/discover/ml loops do not import Streamlit.
+Interactive UI for the physics autocausal loop (trajectory charts, edges, physical insights, energy proxies). Soft-optional - core mine/discover/ml loops do not import Streamlit.
 
 ```bash
 pip install -e ".[ui]"
@@ -352,7 +361,7 @@ python -m autocausal physics ui --port 8518
 # or: streamlit run src/autocausal/apps/physics_streamlit.py --server.port 8518
 ```
 
-See [docs/PHYSICS_DEMO.md](docs/PHYSICS_DEMO.md). **Caveat:** exploratory dynamics only — not true physics ID.
+See [docs/PHYSICS_DEMO.md](docs/PHYSICS_DEMO.md). **Caveat:** exploratory dynamics only - not true physics ID.
 
 ### PostgreSQL
 
@@ -370,21 +379,21 @@ AutoCausalLib is an **exploratory** toolkit. Please read these before treating o
 
 - **Discovery ≠ identification.** PC-lite / scored edges are *candidate* relationships, not proven causal effects.
 - **Imputation and joins change the sample.** Missing-data fills and multi-source joins can invent associations (including ecological fallacy on region aggregates).
-- **SLM text is assistance only.** Narratives, experiment suggestions, and role hints from rules/HF models are generative — not statistical proof.
+- **SLM text is assistance only.** Narratives, experiment suggestions, and role hints from rules/HF models are generative - not statistical proof.
 - **IV / 2SLS paths are soft.** Optional instruments need human design review (relevance, exclusion); lite F-stats are not a substitute.
-- **Bundled public/behavioral tables** include MIT synthetic fixtures *and* real educational CSVs (Iris, etc.) — see [DATASETS.md](DATASETS.md). Exploratory edges on Iris are illustrative, not flower-causation science.
-- **Physics / KPI loops** are predictive rollouts and grounding aids — not true physical or causal identification.
+- **Bundled public/behavioral tables** include MIT synthetic fixtures *and* real educational CSVs (Iris, etc.) - see [DATASETS.md](DATASETS.md). Exploratory edges on Iris are illustrative, not flower-causation science.
+- **Physics / KPI loops** are predictive rollouts and grounding aids - not true physical or causal identification.
 
 Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these caveats; keep them in downstream apps.
 
 ## Docs
 
 - [Library API map (0.8+)](docs/LIBRARY_API.md)
-- [Roadmap (P1–P3 shipped)](docs/ROADMAP.md)
+- [Roadmap (P1-P3 shipped)](docs/ROADMAP.md)
 - [Examples (Iris + real datasets)](docs/EXAMPLES.md)
 - [Dataset licenses & paths](DATASETS.md)
 - [Insight suite (library API + optional SLM)](docs/INSIGHT_SUITE.md)
-- [Auto suites — Cleanse / EDA / Mine (SLM-directed)](docs/SUITES.md)
+- [Auto suites - Cleanse / EDA / Mine (SLM-directed)](docs/SUITES.md)
 - [SLM skilling / tool surface](docs/SLM_SKILLING.md)
 - [MCP connective (agents / Cursor / Claude)](docs/MCP.md)
 - [Agentic causal loop (compact + memory)](docs/AGENTIC_LOOP.md)

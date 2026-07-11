@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "autocausal"
+name = "auto-causal-lib"
 version = "0.10.0"
-description = "Auto-impute, SLM-directed AutoCleanse/AutoEDA/AutoMine suites, agentic causal loop (compact+memory), Kineteq GRAIL soft loop, MCP/AgentHook connective tools, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLM→PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
+description = "Auto-impute, SLM-directed AutoCleanse/AutoEDA/AutoMine suites, agentic causal loop (compact+memory), Kineteq GRAIL soft loop, MCP/AgentHook connective tools, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLMâ†’PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -26,7 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pyarrow>=14.0"]
-datamine = []  # pip install -e ../DataMineLib — see autocausal.datamine_adapter
+datamine = []  # pip install -e ../DataMineLib â€” see autocausal.datamine_adapter
 parquet = ["pyarrow>=14.0"]
 postgres = ["psycopg2-binary>=2.9"]
 vertica = ["vertica-python>=1.3"]
@@ -50,18 +50,21 @@ sqlite = []
 slm = ["torch>=2.0", "transformers>=4.36"]
 torch = ["torch>=2.0"]
 sklearn = ["scikit-learn>=1.3"]
-ml = ["autocausal[torch,sklearn]"]
+ml = ["auto-causal-lib[torch,sklearn]"]
 nlp = ["nltk>=3.8", "gensim>=4.3"]
-nlp-full = ["autocausal[nlp]", "spacy>=3.7"]
+nlp-full = ["auto-causal-lib[nlp]", "spacy>=3.7"]
 causal-extra = ["dowhy>=0.11", "econml>=0.15"]
 web = ["httpx>=0.27"]
 ui = ["streamlit>=1.28", "plotly>=5.18"]
-streamlit = ["autocausal[ui]"]
-suite = ["autocausal[nlp,slm,web,ml,ui]"]
+streamlit = ["auto-causal-lib[ui]"]
+suite = ["auto-causal-lib[nlp,slm,web,ml,ui]"]
 mcp = ["mcp>=1.0"]
-isolates = []  # pip install intentisolates — see autocausal.isolates_bridge
+isolates = []  # pip install intentisolates â€” see autocausal.isolates_bridge
 all-drivers = [
-  "autocausal[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,databricks,synapse,parquet]",
+  "auto-causal-lib[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,databricks,synapse,parquet]",
+]
+all = [
+  "auto-causal-lib[nlp,slm,mcp,ui,ml,causal-extra,web,parquet,all-drivers]",
 ]
 
 [project.scripts]
@@ -70,7 +73,8 @@ autocausal-mcp = "autocausal.mcp.server:main"
 
 [project.urls]
 Homepage = "https://github.com/ehallford11714/auto-causal-lib"
-Documentation = "docs/CONNECTIONS.md"
+PyPI = "https://pypi.org/project/auto-causal-lib/"
+Documentation = "https://github.com/ehallford11714/auto-causal-lib/blob/master/docs/CONNECTIONS.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -81,3 +85,6 @@ autocausal = ["py.typed", "data/**/*", "data/public/**/*", "data/examples/**/*",
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.setuptools.exclude-package-data]
+autocausal = ["**/__pycache__/*", "**/*.pyc", "**/*.pyo"]
