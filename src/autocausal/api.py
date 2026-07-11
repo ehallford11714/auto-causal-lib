@@ -46,6 +46,11 @@ class AutoCausal:
         self.sensitivity_report: Any = None
         self.panel_spec: Any = None
         self.refute_results: list[Any] = []
+        # First-class suite reports (AutoCleanse / AutoEDA / AutoMine)
+        self.cleanse_report: Any = None
+        self.eda_report: Any = None
+        self.mine_report: Any = None
+        self._suite_use_slm: Optional[bool] = None
 
 
     @classmethod
@@ -213,10 +218,95 @@ class AutoCausal:
         self.mining = mine(self._df, min_score=min_score)
         return self
 
+    def cleanse(
+        self,
+        *,
+        use_slm: Optional[bool] = None,
+        text: str = "",
+        impute: str = "auto",
+        **kwargs: Any,
+    ) -> "AutoCausal":
+        """Run :class:`~autocausal.suites.AutoCleanseSuite` (SLM-directed when available).
+
+        Stores ``cleanse_report`` and replaces the working frame with the cleaned frame.
+        ``use_slm`` defaults to try-SLM (soft rule fallback); pass ``False`` to force rules.
+        """
+        from autocausal.suites import AutoCleanseSuite
+        from autocausal.suites.director import resolve_suite_slm
+
+        slm = resolve_suite_slm(use_slm if use_slm is not None else self._suite_use_slm)
+        self._suite_use_slm = slm
+        suite = AutoCleanseSuite(
+            self,
+            use_slm=slm,
+            text=text,
+            impute=impute,  # type: ignore[arg-type]
+            **kwargs,
+        ).run()
+        assert suite.frame is not None and suite.report is not None
+        self._df = suite.frame
+        self.cleanse_report = suite.report
+        if suite.report.imputation:
+            # keep a light pointer; full ImputationReport may be nested in dict
+            pass
+        self.roles = infer_column_roles(self._df)
+        self.source = f"{self.source}+cleanse"
+        return self
+
+    def eda(
+        self,
+        *,
+        use_slm: Optional[bool] = None,
+        text: str = "",
+        **kwargs: Any,
+    ) -> "AutoCausal":
+        """Run :class:`~autocausal.suites.AutoEDASuite`; stores ``eda_report``."""
+        from autocausal.suites import AutoEDASuite
+        from autocausal.suites.director import resolve_suite_slm
+
+        slm = resolve_suite_slm(use_slm if use_slm is not None else self._suite_use_slm)
+        self._suite_use_slm = slm
+        suite = AutoEDASuite(self, use_slm=slm, text=text, **kwargs).run()
+        self.eda_report = suite.report
+        self.source = f"{self.source}+eda"
+        return self
+
+    def automine(
+        self,
+        *,
+        use_slm: Optional[bool] = None,
+        text: str = "",
+        min_score: float = 0.15,
+        join_public: Optional[Union[str, list[str]]] = None,
+        **kwargs: Any,
+    ) -> "AutoCausal":
+        """Run :class:`~autocausal.suites.AutoMineSuite`; stores ``mine_report`` + ``mining``."""
+        from autocausal.suites import AutoMineSuite
+        from autocausal.suites.director import resolve_suite_slm
+
+        slm = resolve_suite_slm(use_slm if use_slm is not None else self._suite_use_slm)
+        self._suite_use_slm = slm
+        suite = AutoMineSuite(
+            self,
+            use_slm=slm,
+            text=text,
+            min_score=min_score,
+            join_public=join_public,
+            **kwargs,
+        ).run()
+        assert suite.frame is not None
+        self._df = suite.frame
+        self.mine_report = suite.report
+        self.mining = suite._mining
+        self.roles = infer_column_roles(self._df)
+        self.source = f"{self.source}+automine"
+        return self
+
     def impute(self, method: ImputeMethod = "auto", *, knn_k: int = 5) -> "AutoCausal":
         self._df, self.imputation = impute_dataframe(self._df, method=method, knn_k=knn_k)
         self.roles = infer_column_roles(self._df)
         return self
+
 
     def discover(
         self,
@@ -910,7 +1000,7 @@ class AutoCausal:
         table: Optional[str] = None,
         query: Optional[str] = None,
         text: Optional[str] = None,
-        use_slm: bool = False,
+        use_slm: bool = True,
         guide_backends: Optional[list[str]] = None,
         join: Optional[Union[str, list[str]]] = None,
         join_on: Optional[Union[str, list[str]]] = None,
@@ -921,16 +1011,24 @@ class AutoCausal:
         physics_horizon: int = 5,
         physics_system: str = "damped_oscillator",
         physics_domain: Union[str, list[str]] = "auto",
+        cleanse: bool = True,
+        eda: bool = False,
         **discover_kwargs: Any,
     ) -> AutoResult:
-        """Orchestrated flow: load → ping? → join? → mine → impute → discover → guide → ground [→ physics]."""
+        """Orchestrated flow: load → [cleanse] → [eda] → join? → mine → impute → discover → guide → ground.
+
+        ``use_slm`` defaults to ``True`` (soft-fail to rules). Auto* means
+        SLM-directed when HuggingFace is available — never hard-crashes offline.
+        """
         from autocausal.db import ping
         from autocausal.ingest import dialect_from_url
+        from autocausal.suites.director import resolve_suite_slm
 
         notes: list[str] = []
         ping_info = None
         path = str(path_or_url)
         lower = path.lower()
+        use_slm = resolve_suite_slm(use_slm)
 
         if lower.endswith(".csv"):
             ac = cls.from_csv(path)
@@ -947,6 +1045,16 @@ class AutoCausal:
         else:
             # treat as CSV path fallback
             ac = cls.from_csv(path)
+
+        ac._suite_use_slm = use_slm
+        notes.append(f"use_slm={use_slm} (soft rule fallback)")
+
+        if cleanse:
+            ac.cleanse(use_slm=use_slm, text=text or "", impute=impute_method)
+            notes.append("cleanse=True (SLM-directed AutoCleanseSuite)")
+        if eda:
+            ac.eda(use_slm=use_slm, text=text or "")
+            notes.append("eda=True (SLM-directed AutoEDASuite)")
 
         if join:
             ac.join_public(join, on=join_on, allow_network=False)
@@ -992,9 +1100,10 @@ class AutoCausal:
                 notes=notes,
             )
 
-        ac.mine()
+        ac.automine(use_slm=use_slm, text=text or "")
         mining = ac.mining
-        ac.impute(method=impute_method)
+        if ac.imputation is None:
+            ac.impute(method=impute_method)
         result = ac.discover(**discover_kwargs)
 
         if guide_backends:

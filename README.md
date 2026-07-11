@@ -24,6 +24,7 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Behavioral traces** (`autocausal.behavioral`) — habit/nudge/reinforcement demos → panel → mine/discover ([docs/NLP_AND_BEHAVIORAL_TRACES.md](docs/NLP_AND_BEHAVIORAL_TRACES.md))
 - **Public causal mining** — multi-source join of bundled/open datasets → mine → discover → report ([docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md))
 - **Insight suite** (`autocausal.insight`) — `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
+- **Auto suites** (`autocausal.suites`) — **SLM-directed** `AutoCleanseSuite` / `AutoEDASuite` / `AutoMineSuite` with rule fallback; fluent `ac.cleanse().eda().automine()` ([docs/SUITES.md](docs/SUITES.md))
 - **Fabric contracts** — `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
 - **Discovery stability & ensemble** — bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
 - **QC gate** — `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
@@ -186,6 +187,29 @@ python -m autocausal public causal --sources finance_demo,demographics_demo,heal
 
 See [docs/PUBLIC_CAUSAL_MINING.md](docs/PUBLIC_CAUSAL_MINING.md).
 
+### Auto suites — Cleanse / EDA / Mine (SLM-directed)
+
+Every **auto\*** path is directed by `SLMAutoDirector` when available; rules always work offline.
+
+```python
+from autocausal import AutoCausal, AutoCleanseSuite, AutoEDASuite, AutoMineSuite
+
+clean = AutoCleanseSuite(df, use_slm=True).run()
+eda = AutoEDASuite(clean.frame, use_slm=True).run()
+mine = AutoMineSuite(clean.frame, use_slm=True).run()
+
+ac = AutoCausal.from_dataframe(df).cleanse().eda().automine().discover()
+# or: AutoCausal.auto("data.csv", use_slm=True, cleanse=True)
+```
+
+```bash
+python -m autocausal suite cleanse --csv data.csv --no-slm -o cleanse.md
+python -m autocausal suite eda --csv data.csv -o eda.md
+python -m autocausal suite mine --csv data.csv --format json -o mine.json
+```
+
+See [docs/SUITES.md](docs/SUITES.md).
+
 ### Insight suite (library-first)
 
 ```python
@@ -296,6 +320,7 @@ Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these ca
 - [Examples (Iris + real datasets)](docs/EXAMPLES.md)
 - [Dataset licenses & paths](DATASETS.md)
 - [Insight suite (library API + optional SLM)](docs/INSIGHT_SUITE.md)
+- [Auto suites — Cleanse / EDA / Mine (SLM-directed)](docs/SUITES.md)
 - [Public causal mining (multi-source join)](docs/PUBLIC_CAUSAL_MINING.md)
 - [NLP & behavioral traces (library API)](docs/NLP_AND_BEHAVIORAL_TRACES.md)
 - [KPI ML loop (SLM → PyTorch)](docs/ML_KPI_LOOP.md)

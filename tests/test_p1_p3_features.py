@@ -34,8 +34,9 @@ def _toy_df(n: int = 80, seed: int = 0) -> pd.DataFrame:
     return pd.DataFrame({"z": z, "x": x, "y": y, "noise": rng.normal(size=n)})
 
 
-def test_version_0_8():
-    assert __version__.startswith("0.8")
+def test_version_0_8_or_newer():
+    # 0.8 P1–P3 APIs remain; suites ship in 0.9.x
+    assert __version__.startswith("0.8") or __version__.startswith("0.9")
 
 
 def test_fabric_contracts_mine_edges_bundle():

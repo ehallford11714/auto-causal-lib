@@ -206,6 +206,8 @@ class InsightSuite:
         model_name: Optional[str] = None,
         guide_backends: Optional[list[str]] = None,
     ) -> None:
+        # Prefer SLM for auto* research loops when env set; constructor default
+        # remains False for backward compat — pass use_slm=True (recommended).
         self.use_slm = bool(use_slm) or _env_slm()
         self.model_name = model_name
         self.guide_backends = guide_backends
@@ -214,6 +216,8 @@ class InsightSuite:
         )
         self.last_report: Optional[InsightReport] = None
         self.ac: Any = None
+        # Documented recommendation: auto* paths should pass use_slm=True
+        self._slm_recommended = True
 
     @classmethod
     def from_autocausal(

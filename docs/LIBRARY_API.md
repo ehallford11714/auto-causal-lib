@@ -99,6 +99,7 @@ ac = AutoCausal.from_sqlalchemy(
 | `autocausal.behavioral` | `BehavioralTraceStore`, `mine_behavioral_traces` |
 | `autocausal.public_suite` / `public_causal` | `load_public`, `mine_public` |
 | `autocausal.insight` | `InsightSuite`, `run_insight_loop` |
+| `autocausal.suites` | `AutoCleanseSuite`, `AutoEDASuite`, `AutoMineSuite`, `SLMAutoDirector` (SLM-directed; [SUITES.md](SUITES.md)) |
 | `autocausal.datasets` | `load_dataset`, `list_datasets` (cache + soft network) |
 | `autocausal.physics` | `PhysicsCausalSuite` |
 | `autocausal.ml` | `KPIMinedCausalLoop` |
@@ -110,4 +111,4 @@ plus `mechanism_notes` / `diagnostics` (heuristic — not Little's MCAR).
 
 ## Version
 
-See `autocausal.__version__` (0.8.0+). Roadmap: [ROADMAP.md](ROADMAP.md).
+See `autocausal.__version__` (0.9.0+). Roadmap: [ROADMAP.md](ROADMAP.md).

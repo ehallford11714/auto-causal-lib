@@ -39,6 +39,13 @@ __all__ = [
     "align",
     "PanelSpec",
     "refute",
+    "AutoCleanseSuite",
+    "AutoEDASuite",
+    "AutoMineSuite",
+    "CleanseReport",
+    "EDAReport",
+    "MineReport",
+    "SLMAutoDirector",
 ]
 
 
@@ -98,4 +105,20 @@ def __getattr__(name: str):
         from autocausal import panel as _panel
 
         return getattr(_panel, name)
+    if name in (
+        "AutoCleanseSuite",
+        "AutoEDASuite",
+        "AutoMineSuite",
+        "CleanseReport",
+        "EDAReport",
+        "MineReport",
+        "SLMAutoDirector",
+        "SLMDirectives",
+        "auto_cleanse",
+        "auto_eda",
+        "auto_mine",
+    ):
+        from autocausal import suites as _suites
+
+        return getattr(_suites, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

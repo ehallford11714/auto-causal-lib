@@ -1,7 +1,7 @@
-"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public|physics|ml|nlp|behavioral|insight ...
+"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public|physics|ml|nlp|behavioral|insight|suite ...
 
-Thin consumer of library modules — prefer importing ``autocausal.nlp`` /
-``autocausal.behavioral`` / ``autocausal.insight`` directly in apps and notebooks.
+Thin consumer of library modules — prefer importing ``autocausal.suites`` /
+``autocausal.nlp`` / ``autocausal.behavioral`` / ``autocausal.insight`` in apps.
 """
 
 from __future__ import annotations
@@ -406,6 +406,25 @@ def _build_parser() -> argparse.ArgumentParser:
         register_insight_parser(sub)
     except Exception:
         pass
+
+    # suite — AutoCleanse / AutoEDA / AutoMine (library-first; thin CLI)
+    suite = sub.add_parser(
+        "suite",
+        help="AutoCleanse / AutoEDA / AutoMine suites (prefer library API)",
+    )
+    suite_sub = suite.add_subparsers(dest="suite_cmd")
+    for name, help_txt in (
+        ("cleanse", "SLM-directed cleanse → CleanseReport"),
+        ("eda", "SLM-directed EDA → EDAReport"),
+        ("mine", "SLM-directed mine → MineReport"),
+    ):
+        sp = suite_sub.add_parser(name, help=help_txt)
+        _add_source_args(sp)
+        sp.add_argument("--slm", action="store_true", default=True, help="Try SLM director (default)")
+        sp.add_argument("--no-slm", action="store_true", help="Force rule director")
+        sp.add_argument("--text", type=str, default="", help="Optional context for director")
+        sp.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
+        sp.add_argument("-o", "--out", type=str, default=None)
 
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
@@ -955,6 +974,39 @@ def main(argv: list[str] | None = None) -> int:
             print(f"insight module unavailable: {e}", file=sys.stderr)
             return 2
         return handle_insight(args)
+
+    if args.command == "suite":
+        use_slm = not bool(getattr(args, "no_slm", False))
+        text = getattr(args, "text", "") or ""
+        if args.suite_cmd == "cleanse":
+            from autocausal.suites import AutoCleanseSuite
+
+            ac = _load_ac(args)
+            suite = AutoCleanseSuite(ac, use_slm=use_slm, text=text).run()
+            assert suite.report is not None
+            payload = suite.report.to_json() if args.fmt == "json" else suite.report.to_markdown()
+            _emit(payload, args.out)
+            return 0
+        if args.suite_cmd == "eda":
+            from autocausal.suites import AutoEDASuite
+
+            ac = _load_ac(args)
+            suite = AutoEDASuite(ac, use_slm=use_slm, text=text).run()
+            assert suite.report is not None
+            payload = suite.report.to_json() if args.fmt == "json" else suite.report.to_markdown()
+            _emit(payload, args.out)
+            return 0
+        if args.suite_cmd == "mine":
+            from autocausal.suites import AutoMineSuite
+
+            ac = _load_ac(args)
+            suite = AutoMineSuite(ac, use_slm=use_slm, text=text, join_public=None).run()
+            assert suite.report is not None
+            payload = suite.report.to_json() if args.fmt == "json" else suite.report.to_markdown()
+            _emit(payload, args.out)
+            return 0
+        parser.parse_args(["suite", "--help"])
+        return 0
 
     parser.print_help()
     return 1
