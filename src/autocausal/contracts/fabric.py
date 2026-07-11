@@ -86,7 +86,15 @@ def edges_to_causal_edge_envelopes(
         if conf_f is not None:
             conf_f = max(0.0, min(1.0, conf_f))
         relation = str(e.get("relation") or e.get("type") or default_relation)
-        if relation in ("association", "score_pc_lite", "corr_skeleton", "mi_stub"):
+        if relation in (
+            "association",
+            "score_pc_lite",
+            "corr_skeleton",
+            "mi",
+            "mi_binned",
+            "mi_stub",
+            "grail_boost",
+        ):
             relation = default_relation
         if relation == "iv_2sls":
             relation = "instruments"

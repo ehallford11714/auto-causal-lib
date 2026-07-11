@@ -125,6 +125,12 @@ class GuideResult:
             lines.append("")
         return "\n".join(lines)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
 
 @dataclass
 class CreationResult:
@@ -171,6 +177,12 @@ class CreationResult:
             lines += ["## Notes", ""] + [f"- {n}" for n in self.notes] + [""]
         return "\n".join(lines)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
 
 @dataclass
 class InferenceResult:
@@ -215,6 +227,12 @@ class InferenceResult:
         if self.notes:
             lines += ["## Notes", ""] + [f"- {n}" for n in self.notes] + [""]
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
 
 
 class GuideBackend(Protocol):

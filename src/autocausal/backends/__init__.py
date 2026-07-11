@@ -36,12 +36,26 @@ DISCOVERY_BACKENDS: dict[str, dict[str, Any]] = {
         "builtin": True,
         "description": "Built-in correlation-threshold skeleton",
     },
+    "mi": {
+        "module": None,
+        "extra": None,
+        "kind": "discovery",
+        "builtin": True,
+        "description": "Built-in binned normalized mutual information (alias of mi_binned)",
+    },
+    "mi_binned": {
+        "module": None,
+        "extra": None,
+        "kind": "discovery",
+        "builtin": True,
+        "description": "Built-in cheap binned normalized mutual information",
+    },
     "mi_stub": {
         "module": None,
         "extra": None,
         "kind": "discovery",
         "builtin": True,
-        "description": "Built-in binned mutual-information stub",
+        "description": "Alias of mi_binned (binned NMI); kept for backward compatibility",
     },
     "causal_learn_pc": {
         "module": "causallearn",

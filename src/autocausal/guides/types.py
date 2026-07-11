@@ -127,6 +127,12 @@ class GuideResult:
             lines += ["## Notes", ""] + [f"- {n}" for n in self.notes] + [""]
         return "\n".join(lines)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
 
 @dataclass
 class DirectionPlan:
@@ -221,6 +227,12 @@ class DirectionPlan:
         if self.notes:
             lines += ["## Notes", ""] + [f"- {n}" for n in self.notes] + [""]
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
 
     def as_guide_result(self) -> GuideResult:
         """Project to GuideResult for second-pass discover compatibility."""

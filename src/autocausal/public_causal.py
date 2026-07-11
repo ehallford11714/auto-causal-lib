@@ -149,6 +149,12 @@ class PublicCausalReport:
         lines.append("")
         return "\n".join(lines)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
 
 class PublicCausalMiner:
     """Facade: multi-source public join → mine → impute → discover → report."""

@@ -114,6 +114,11 @@ def _build_parser() -> argparse.ArgumentParser:
     ping_p.add_argument("--timeout", type=float, default=5.0)
     ping_p.add_argument("-o", "--out", type=str, default=None)
 
+    # doctor
+    doc = sub.add_parser("doctor", help="Environment / engine / optional-dep health check")
+    doc.add_argument("--json", action="store_true", help="Emit JSON instead of markdown")
+    doc.add_argument("-o", "--out", type=str, default=None)
+
     # guide
     g = sub.add_parser("guide", help="SLM/rule guide from mine+discover outputs")
     _add_source_args(g)
@@ -508,6 +513,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "dialects":
         print(json.dumps(DIALECT_MATRIX, indent=2))
+        return 0
+
+    if args.command == "doctor":
+        from autocausal.doctor import doctor_report, format_doctor_markdown
+
+        report = doctor_report()
+        if getattr(args, "json", False):
+            text = json.dumps(report, indent=2)
+        else:
+            text = format_doctor_markdown(report)
+        _emit(text, getattr(args, "out", None))
         return 0
 
     if args.command == "ping":

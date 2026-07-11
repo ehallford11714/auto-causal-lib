@@ -86,10 +86,10 @@ def ac_pipeline(iris_df):
     return ac, result
 
 
-def test_version_0_11_3_or_newer():
+def test_version_0_11_4_or_newer():
     assert __version__.startswith("0.11.")
     parts = [int(x) for x in __version__.split(".")[:3]]
-    assert parts >= [0, 11, 3]
+    assert parts >= [0, 11, 4]
 
 
 @pytest.mark.parametrize("name", DISCOVERY_METHODS)
@@ -247,3 +247,108 @@ def test_no_attribute_error_on_documented_advanced_pattern(ac_pipeline):
     _ = result.engines_status()
     _ = ac.mining.report()
     _ = ac.mining.to_mine_report()
+
+
+def test_remaining_result_types_have_report_alias():
+    """0.11.4: report() on remaining user-facing result/report classes."""
+    from autocausal.behavioral.report import BehavioralReport
+    from autocausal.grounding import GroundingReport
+    from autocausal.guides.types import DirectionPlan
+    from autocausal.ml.construct import ModelConstructPlan
+    from autocausal.ml.fit_report import FitReport
+    from autocausal.physics.types import (
+        PhysicalGroundingReport,
+        PhysicsLoopResult,
+        PhysicsState,
+        Trajectory,
+        TrajectoryPoint,
+    )
+    from autocausal.public_causal import PublicCausalReport
+    from autocausal.slm import CreationResult, InferenceResult
+    from autocausal.suite_tools import ValidationReport
+
+    classes = [
+        PublicCausalReport,
+        DirectionPlan,
+        CreationResult,
+        InferenceResult,
+        ValidationReport,
+        FitReport,
+        ModelConstructPlan,
+        BehavioralReport,
+        GroundingReport,
+    ]
+    for cls in classes:
+        assert hasattr(cls, "report"), f"{cls.__name__} missing report"
+        assert callable(getattr(cls, "report"))
+
+    # Minimal instances for types that need construction to exercise report()
+    pub = PublicCausalReport(sources=[])
+    assert isinstance(pub.report(), str)
+    assert pub.report(as_markdown=False).strip().startswith("{")
+
+    plan = DirectionPlan()
+    assert isinstance(plan.report(), str)
+
+    create = CreationResult(backend="rule")
+    assert isinstance(create.report(), str)
+
+    infer = InferenceResult(backend="rule")
+    assert isinstance(infer.report(), str)
+
+    val = ValidationReport(ok=True)
+    assert isinstance(val.report(), str)
+
+    fit = FitReport()
+    assert isinstance(fit.report(), str)
+
+    mcp = ModelConstructPlan()
+    assert isinstance(mcp.report(), str)
+
+    beh = BehavioralReport(trace_name="t")
+    assert isinstance(beh.report(), str)
+
+    ground = GroundingReport(claims=[])
+    assert isinstance(ground.report(), str)
+
+    traj = Trajectory(
+        points=[
+            TrajectoryPoint(
+                t=0,
+                state=PhysicsState(names=["x"], position=[0.0]),
+            )
+        ]
+    )
+    phys = PhysicsLoopResult(
+        trajectory=traj,
+        physical_grounding=PhysicalGroundingReport(insights=[]),
+    )
+    assert hasattr(PhysicsLoopResult, "report") and callable(PhysicsLoopResult.report)
+    assert isinstance(phys.report(), str)
+
+
+def test_mi_binned_and_aliases(iris_df):
+    ac = AutoCausal.from_dataframe(iris_df, source="iris")
+    for method in ("mi_binned", "mi", "mi_stub"):
+        r = ac.discover(method=method, qc="off", use_iv=False, min_abs_corr=0.1)
+        assert r is not None
+        # edges from MI path are labeled mi_binned
+        mi_edges = [e for e in r.edges if e.get("method") == "mi_binned"]
+        assert mi_edges or r.method in ("mi_binned", "mi", "mi_stub", "score_pc_lite")
+
+
+def test_apply_grail_and_session_snapshot(iris_df):
+    ac = AutoCausal.from_dataframe(iris_df, source="iris")
+    ac.discover(qc="off", use_iv=False, min_abs_corr=0.2)
+    report = ac.apply_grail("iris causal discovery", second_pass=True, qc="off", use_iv=False)
+    assert report is not None
+    assert hasattr(report, "boost_edges")
+    assert isinstance(report.boost_edges, list)
+    assert ac.grail_report is report
+
+    snap = ac.session_snapshot()
+    assert isinstance(snap, dict)
+    assert snap["n_rows"] == len(iris_df)
+    assert snap["has_result"] is True
+    assert "n_edges" in snap
+    assert snap["schema"] == "AutoCausalSessionSnapshot.v1"

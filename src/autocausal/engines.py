@@ -273,21 +273,30 @@ def discover_with(
 
         return gcastle_backend.discover(df, columns=columns, **kwargs)
     # Builtin path via discovery module
-    if m in ("score_pc_lite", "corr_skeleton", "mi_stub"):
+    if m in ("score_pc_lite", "corr_skeleton", "mi", "mi_binned", "mi_stub"):
         from autocausal.discovery import discover_relationships
         from autocausal.roles import infer_column_roles
 
         work = df[columns] if columns else df
         roles = infer_column_roles(work)
-        res = discover_relationships(work, roles=roles, method=m, use_iv=False, **kwargs)  # type: ignore[arg-type]
+        # Normalize MI aliases to the canonical method id for discover_relationships
+        method_id = "mi_binned" if m in ("mi", "mi_binned", "mi_stub") else m
+        res = discover_relationships(
+            work, roles=roles, method=method_id, use_iv=False, **kwargs
+        )  # type: ignore[arg-type]
         return {
             "ok": True,
             "soft_skip": False,
-            "method": m,
+            "method": method_id if m in ("mi", "mi_binned", "mi_stub") else m,
             "backend": "builtin",
             "edges": list(res.edges),
             "data": {"n_edges": len(res.edges)},
-            "notes": list(res.notes),
+            "notes": list(res.notes)
+            + (
+                ["mi_stub is an alias of mi_binned"]
+                if m == "mi_stub"
+                else (["mi is an alias of mi_binned"] if m == "mi" else [])
+            ),
             "error": None,
         }
     return {

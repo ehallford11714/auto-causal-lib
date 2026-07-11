@@ -1,5 +1,17 @@
 # AutoCausalLib roadmap
 
+## Shipped in 0.11.4 — report() aliases + gap-closure
+
+- [x] `report(*, as_markdown=True)` on PublicCausalReport, BehavioralReport, GroundingReport
+- [x] GuideResult / DirectionPlan, ModelConstructPlan, FitReport, KPILoopResult
+- [x] Trajectory / PhysicalGroundingReport / PhysicsLoopResult
+- [x] SLM GuideResult / CreationResult / InferenceResult, ValidationReport, SLMDirectives
+- [x] Ergonomics tests for callable `report()` on remaining result types
+- [x] `mi` / `mi_binned` real binned NMI (`mi_stub` alias; edges labeled `mi_binned`)
+- [x] `doctor` CLI + `doctor_report` / `format_doctor_markdown`
+- [x] `apply_grail` / `boost_edges` → discover merge (`grail_boost`); `direct()` merges plan boosts
+- [x] `session_snapshot()` + LIBRARY_API persistence notes (in-memory; MCP/EpisodeStore)
+
 ## Shipped in 0.11.3 — DiscoveryResult post-discover handle
 
 - [x] `DiscoveryResult.to_fabric_bundle()` / `to_mine_report()` / `to_causaliv_request()` / `engines_status()`
@@ -35,7 +47,7 @@
 - [x] NLP wired into guide/direct (`enrich_from_text`)
 
 ### Priority 2 — serious causal mining
-- [x] Multi-method discovery (`score_pc_lite` + `corr_skeleton` + `mi_stub` → consensus)
+- [x] Multi-method discovery (`score_pc_lite` + `corr_skeleton` + `mi_binned` → consensus)
 - [x] Panel / longitudinal (`PanelSpec`, lag/diff/within, soft DiD notes)
 - [x] CausalIV handoff (`AutoCausal.to_causaliv_request()`)
 - [x] Sensitivity plumbed onto `AutoCausal` / `AutoResult` / `auto()`

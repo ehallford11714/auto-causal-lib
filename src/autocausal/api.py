@@ -52,6 +52,7 @@ class AutoCausal:
         self.eda_report: Any = None
         self.mine_report: Any = None
         self._suite_use_slm: Optional[bool] = None
+        self.grail_report: Any = None
 
 
     @classmethod
@@ -393,7 +394,7 @@ class AutoCausal:
         return result
 
     def discover_ensemble(self, **kwargs: Any) -> DiscoveryResult:
-        """Multi-method consensus discovery (pc_lite + corr_skeleton + mi_stub)."""
+        """Multi-method consensus discovery (pc_lite + corr_skeleton + mi_binned)."""
         kwargs.setdefault("ensemble", True)
         return self.discover(**kwargs)
 
@@ -530,7 +531,148 @@ class AutoCausal:
                 if self.result is not None:
                     self.result.guide = self.guide_result.to_dict()
                     self.result.guide["direction_plan"] = plan.to_dict()
+        boost = getattr(plan, "boost_edges", None) or []
+        if boost:
+            self._merge_boost_edges(boost)
         return plan
+
+    def _merge_boost_edges(self, boost_edges: Sequence[Any]) -> int:
+        """Merge boost edges into ``self.result.edges`` when endpoints exist.
+
+        Dedupes by undirected (source, target). Tags method ``grail_boost``.
+        Returns number of newly appended edges.
+        """
+        if self.result is None or not boost_edges:
+            return 0
+        cols = set(self._df.columns)
+        existing = {
+            tuple(sorted((str(e.get("source")), str(e.get("target")))))
+            for e in (self.result.edges or [])
+            if e.get("source") and e.get("target")
+        }
+        added = 0
+        notes = list(self.result.notes or [])
+        for raw in boost_edges:
+            if not isinstance(raw, dict):
+                continue
+            src = str(raw.get("source") or raw.get("from") or "")
+            tgt = str(raw.get("target") or raw.get("to") or "")
+            if not src or not tgt or src not in cols or tgt not in cols:
+                continue
+            key = tuple(sorted((src, tgt)))
+            if key in existing:
+                continue
+            edge = {
+                "source": src,
+                "target": tgt,
+                "score": float(raw.get("score") or raw.get("weight") or 0.35),
+                "confidence": float(raw.get("confidence") or 0.3),
+                "pvalue": raw.get("pvalue"),
+                "type": str(raw.get("type") or "association"),
+                "orientation": str(raw.get("orientation") or "grail_boost"),
+                "method": "grail_boost",
+            }
+            self.result.edges.append(edge)
+            existing.add(key)
+            added += 1
+        if added:
+            notes.append(f"Merged {added} boost_edges (method=grail_boost).")
+            self.result.notes = notes
+            # keep graph.edges in sync when present
+            graph = getattr(self.result, "graph", None)
+            if isinstance(graph, dict) and "edges" in graph:
+                graph["edges"] = [
+                    {
+                        "source": e["source"],
+                        "target": e["target"],
+                        "score": e.get("score"),
+                        "confidence": e.get("confidence"),
+                        "stability": e.get("stability"),
+                        "type": e.get("type", "association"),
+                        "method": e.get("method"),
+                    }
+                    for e in self.result.edges
+                ]
+        return added
+
+    def apply_grail(
+        self,
+        text: str = "",
+        *,
+        report: Any = None,
+        second_pass: bool = True,
+        **discover_kwargs: Any,
+    ) -> Any:
+        """Run GRAIL and optionally merge focus / boost_edges into discovery.
+
+        If ``report`` is None, runs ``GrailEngine().run(...)``. When
+        ``second_pass`` and the report has ``focus_columns``, rediscovers on
+        that focus. Merges ``boost_edges`` whose endpoints exist in the frame.
+        """
+        from autocausal.grail import GrailEngine
+
+        if report is None:
+            eng = GrailEngine()
+            goal = text or "causal discovery"
+            context = {
+                "columns": list(self._df.columns),
+                "text": text or goal,
+                "edges": self.result.edges if self.result is not None else [],
+                "candidates": self.result.candidates if self.result is not None else {},
+            }
+            report = eng.run(goal, context=context)
+        self.grail_report = report
+
+        if self.result is None:
+            self.discover(**discover_kwargs)
+
+        if second_pass and getattr(report, "focus_columns", None):
+            focus = [c for c in report.focus_columns if c in self._df.columns]
+            if len(focus) >= 2:
+                self.discover(focus_columns=focus, **discover_kwargs)
+
+        boost = list(getattr(report, "boost_edges", None) or [])
+        if boost:
+            self._merge_boost_edges(boost)
+        return report
+
+    def session_snapshot(self) -> dict[str, Any]:
+        """Lightweight in-memory session metadata (full DF is NOT persisted)."""
+        methods: list[str] = []
+        n_edges = 0
+        notes: list[str] = []
+        if self.result is not None:
+            n_edges = len(self.result.edges or [])
+            m = getattr(self.result, "method", None)
+            if m:
+                methods.append(str(m))
+            ens = getattr(self.result, "ensemble_methods", None) or []
+            for x in ens:
+                if str(x) not in methods:
+                    methods.append(str(x))
+            # collect unique edge methods
+            for e in self.result.edges or []:
+                em = e.get("method")
+                if em and str(em) not in methods:
+                    methods.append(str(em))
+            notes = list(self.result.notes or [])[:8]
+        return {
+            "schema": "AutoCausalSessionSnapshot.v1",
+            "source": self.source,
+            "shape": [int(self._df.shape[0]), int(self._df.shape[1])],
+            "n_rows": int(self._df.shape[0]),
+            "n_cols": int(self._df.shape[1]),
+            "columns": [str(c) for c in self._df.columns],
+            "has_result": self.result is not None,
+            "n_edges": n_edges,
+            "methods": methods,
+            "has_grail": self.grail_report is not None,
+            "notes": notes
+            + [
+                "Full DataFrame is NOT persisted — in-memory session only.",
+                "Use MCP SessionStore for agent multi-step; EpisodeStore/persist_dir for loop JSONL.",
+            ],
+        }
 
     def sensitivity(
         self,

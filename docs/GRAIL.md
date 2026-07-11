@@ -73,6 +73,17 @@ print(report.to_markdown())
 print(report.focus_columns, report.boost_edges[:3])
 ```
 
+Wire GRAIL into discovery (focus rediscover + merge `boost_edges`):
+
+```python
+from autocausal import AutoCausal
+
+ac = AutoCausal.from_csv("data.csv")
+ac.discover(qc="off")
+report = ac.apply_grail("Does spend cause revenue?")  # stores ac.grail_report
+# boost edges tagged method=grail_boost when both endpoints exist
+```
+
 Primitives:
 
 ```python

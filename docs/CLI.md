@@ -32,6 +32,7 @@ Most data commands accept one of:
 | `mine` | Profile + associations (`--min-score`) |
 | `auto` | Full: join? → mine → impute → discover → guide → ground (`--text`, `--guides`, `--physics`, …) |
 | `ping` | DB/public health (`--url` \| `--public`, `--no-network`) |
+| `doctor` | Environment / engine / optional-dep health (`--json`) |
 | `dialects` | Print SQLAlchemy dialect matrix JSON |
 | `slm-status` | RuleBackend / HuggingFace availability |
 
@@ -78,6 +79,8 @@ Most data commands accept one of:
 
 ```bash
 python -m autocausal discover --csv data.csv --format markdown
+python -m autocausal doctor
+python -m autocausal doctor --json
 python -m autocausal engines status
 python -m autocausal estimate --csv data.csv --backend builtin_ols --y y --d x --discover
 python -m autocausal refute --csv data.csv --method placebo --discover

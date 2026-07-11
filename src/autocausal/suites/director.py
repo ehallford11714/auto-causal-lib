@@ -110,6 +110,9 @@ class SLMDirectives:
             d["tools_invoked"] = list(tools)
         return d
 
+    def to_json(self, indent: int = 2) -> str:
+        return json.dumps(self.to_dict(), indent=indent, default=str)
+
     def to_markdown(self) -> str:
         lines = [
             f"# SLM directives ({self.stage})",
@@ -143,6 +146,12 @@ class SLMDirectives:
                 lines.append(f"- {n}")
         lines.append("")
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
 
 
 class SLMAutoDirector:

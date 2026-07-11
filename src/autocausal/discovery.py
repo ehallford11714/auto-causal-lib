@@ -2,7 +2,8 @@
 
 Supports:
 - ``score_pc_lite`` (default)
-- lightweight ``corr_skeleton`` and ``mi_stub`` methods
+- lightweight ``corr_skeleton`` and binned NMI (``mi`` / ``mi_binned``;
+  ``mi_stub`` is a backward-compat alias)
 - bootstrap stability scores (honest confidence)
 - multi-method consensus via ``discover_ensemble``
 """
@@ -18,10 +19,21 @@ import pandas as pd
 from autocausal.iv import try_iv_edges
 from autocausal.roles import ColumnRole, numeric_matrix
 
+__all__ = [
+    "DiscoveryMethod",
+    "BUILTIN_METHODS",
+    "EXTERNAL_METHODS",
+    "discover_relationships",
+    "discover_ensemble",
+    "propose_candidates",
+    "consensus_edges",
+]
 
 DiscoveryMethod = Literal[
     "score_pc_lite",
     "corr_skeleton",
+    "mi",
+    "mi_binned",
     "mi_stub",
     "causal_learn_pc",
     "causal_learn_ges",
@@ -31,7 +43,9 @@ DiscoveryMethod = Literal[
     "gcastle_notears",
 ]
 
-BUILTIN_METHODS = frozenset({"score_pc_lite", "corr_skeleton", "mi_stub"})
+BUILTIN_METHODS = frozenset(
+    {"score_pc_lite", "corr_skeleton", "mi", "mi_binned", "mi_stub"}
+)
 EXTERNAL_METHODS = frozenset(
     {
         "causal_learn_pc",
@@ -270,14 +284,19 @@ def _corr_skeleton_edges(
     return edges
 
 
-def _mi_stub_edges(
+def _mi_binned_edges(
     clean: pd.DataFrame,
     cols: list[str],
     *,
     min_score: float = 0.12,
     n_bins: int = 4,
 ) -> list[dict[str, Any]]:
-    """Lightweight binned mutual-information stub (no sklearn required)."""
+    """Cheap binned normalized mutual information (no sklearn required).
+
+    Quantile-bins each column, estimates NMI from the joint contingency table,
+    and orients edges via regression R² asymmetry. Labeled ``mi_binned``;
+    ``mi`` / ``mi_stub`` are caller aliases for the same path.
+    """
     from math import log
 
     edges: list[dict[str, Any]] = []
@@ -324,11 +343,22 @@ def _mi_stub_edges(
                 "pvalue": None,
                 "type": "association",
                 "orientation": "score_r2",
-                "method": "mi_stub",
+                "method": "mi_binned",
             }
         )
     edges.sort(key=lambda e: e["confidence"], reverse=True)
     return edges
+
+
+def _mi_stub_edges(
+    clean: pd.DataFrame,
+    cols: list[str],
+    *,
+    min_score: float = 0.12,
+    n_bins: int = 4,
+) -> list[dict[str, Any]]:
+    """Backward-compat wrapper for :func:`_mi_binned_edges`."""
+    return _mi_binned_edges(clean, cols, min_score=min_score, n_bins=n_bins)
 
 
 def _run_external_method(
@@ -367,8 +397,8 @@ def _run_method(
         return edges
     if m == "corr_skeleton":
         return _corr_skeleton_edges(clean, cols, min_abs_corr=min_abs_corr)
-    if m == "mi_stub":
-        return _mi_stub_edges(clean, cols, min_score=max(0.08, min_abs_corr * 0.8))
+    if m in ("mi", "mi_binned", "mi_stub"):
+        return _mi_binned_edges(clean, cols, min_score=max(0.08, min_abs_corr * 0.8))
     return _pc_lite_edges(
         clean, cols, alpha=alpha, max_cond_size=max_cond_size, min_abs_corr=min_abs_corr
     )
@@ -634,7 +664,7 @@ def discover_ensemble(
     from autocausal.results import DiscoveryResult
 
     if methods is None:
-        methods_list: list[str] = ["score_pc_lite", "corr_skeleton", "mi_stub"]
+        methods_list: list[str] = ["score_pc_lite", "corr_skeleton", "mi_binned"]
         if include_optional:
             try:
                 from autocausal.engines import optional_ensemble_methods

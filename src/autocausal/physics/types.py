@@ -110,6 +110,12 @@ class Trajectory:
             lines.append("")
         return "\n".join(lines)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
 
 @dataclass
 class PhysicalInsight:
@@ -181,6 +187,12 @@ class PhysicalGroundingReport:
                 lines.append(f"- {n}")
             lines.append("")
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
 
 
 @dataclass
@@ -262,3 +274,9 @@ class PhysicsLoopResult:
             lines.append(f"## Domain grounding — {len(claims)} claim(s)")
             lines.append("")
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()

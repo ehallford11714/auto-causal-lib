@@ -36,6 +36,7 @@ Doc index: [INDEX.md](INDEX.md) · Modules: [MODULES.md](MODULES.md) · Backends
 | `validate_frame`, `QCReport` | qc |
 | `align`, `PanelSpec` | join / panel |
 | Suites / skilling / grail / agentic / AgentHook | suites, skilling, grail, agentic, connective |
+| `doctor_report` | doctor |
 
 ---
 
@@ -59,6 +60,14 @@ ac.discover(stability=True, bootstrap_n=20)
 ac.discover(ensemble=True, include_optional=True)  # appends installed soft backends
 ac.discover(method="causal_learn_pc")              # soft; falls back to pc_lite
 ac.discover(methods=["score_pc_lite", "lingam", "gcastle_notears"], min_methods=1)
+ac.discover(method="mi_binned")  # cheap binned NMI (aliases: mi, mi_stub)
+```
+
+### GRAIL → discover
+
+```python
+ac.discover(qc="off")
+report = ac.apply_grail("Does spend cause revenue?")  # focus + boost_edges merge
 ```
 
 ### Estimate / refute / engines
@@ -124,6 +133,17 @@ ac.ml_loop(text="…", use_torch=False)
 
 ---
 
+## Session persistence
+
+`AutoCausal` is **in-memory** — the full DataFrame is not pickled in 0.11.x.
+
+- `ac.session_snapshot()` — lightweight metadata (source, shape, columns, `n_edges`, methods) for doctor/MCP debugging
+- MCP `SessionStore` — agent multi-step tool sessions
+- Agentic `EpisodeStore` / `persist_dir` — loop JSONL persistence
+- Full pickle session format is deferred past 0.11.x
+
+---
+
 ## Extras
 
 | Extra | Provides |
@@ -138,4 +158,4 @@ ac.ml_loop(text="…", use_torch=False)
 
 ## Version
 
-`autocausal.__version__` (0.11.x+). Roadmap: [ROADMAP.md](ROADMAP.md).
+`autocausal.__version__` (0.11.4+). Roadmap: [ROADMAP.md](ROADMAP.md).

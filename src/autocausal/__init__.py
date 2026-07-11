@@ -65,6 +65,7 @@ __all__ = [
     "AgenticCausalLoop",
     "AgenticLoopReport",
     "run_agentic_loop",
+    "doctor_report",
 ]
 
 
@@ -182,4 +183,8 @@ def __getattr__(name: str):
         from autocausal import agentic as _agentic
 
         return getattr(_agentic, name)
+    if name == "doctor_report":
+        from autocausal.doctor import doctor_report
+
+        return doctor_report
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

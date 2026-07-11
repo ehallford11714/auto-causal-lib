@@ -80,6 +80,12 @@ class KPILoopResult:
             lines += ["## Notes", ""] + [f"- {n}" for n in self.notes] + [""]
         return "\n".join(lines)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
 
 def _mine_kpis(df: pd.DataFrame, *, min_score: float = 0.15) -> dict[str, Any]:
     """Prefer DataMine when installed; else autocausal.mining."""

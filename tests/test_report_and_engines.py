@@ -25,8 +25,8 @@ def _toy_df(n: int = 60, seed: int = 1) -> pd.DataFrame:
     return pd.DataFrame({"z": z, "x": x, "y": y})
 
 
-def test_version_0_11_3():
-    assert __version__ == "0.11.3"
+def test_version_0_11_4():
+    assert __version__ == "0.11.4"
 
 
 def test_discovery_result_report_alias():

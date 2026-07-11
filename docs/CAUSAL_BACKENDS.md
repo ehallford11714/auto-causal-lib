@@ -25,7 +25,8 @@ mine → discover(+causal-learn / lingam / gcastle)
 |-----------|---------|-------|
 | `score_pc_lite` | builtin | Default PC-lite |
 | `corr_skeleton` | builtin | Correlation threshold |
-| `mi_stub` | builtin | Binned MI stub |
+| `mi` / `mi_binned` | builtin | Cheap binned normalized MI |
+| `mi_stub` | builtin | Alias of `mi_binned` (compat) |
 | `causal_learn_pc` | causal-learn | Soft |
 | `causal_learn_ges` | causal-learn | Soft |
 | `causal_learn_fci` | causal-learn | Soft (capped columns) |
