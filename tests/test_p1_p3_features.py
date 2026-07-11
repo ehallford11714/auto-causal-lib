@@ -35,7 +35,7 @@ def _toy_df(n: int = 80, seed: int = 0) -> pd.DataFrame:
 
 
 def test_version_0_8_or_newer():
-    # 0.8 P1–P3 APIs remain; suites ship in 0.9.x
+    # 0.8 P1–P3 APIs remain; suites + skilling ship in 0.9.x
     assert __version__.startswith("0.8") or __version__.startswith("0.9")
 
 

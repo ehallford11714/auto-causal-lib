@@ -426,6 +426,25 @@ def _build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
         sp.add_argument("-o", "--out", type=str, default=None)
 
+    # skilling — SLM tool surface (library-first; thin CLI)
+    skill = sub.add_parser(
+        "skilling",
+        help="SLM skilling / tool surface (prefer library: autocausal.skilling)",
+    )
+    skill_sub = skill.add_subparsers(dest="skilling_cmd")
+    sk_list = skill_sub.add_parser("list", help="List skills and tools")
+    sk_list.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
+    sk_list.add_argument("-o", "--out", type=str, default=None)
+    sk_drill = skill_sub.add_parser("drill", help="Offline rule-path skill drill")
+    sk_drill.add_argument(
+        "--skill",
+        type=str,
+        default="skill:autocleanse",
+        help="Skill id (skill:autocleanse|autoeda|automine|autocausal_loop)",
+    )
+    sk_drill.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
+    sk_drill.add_argument("-o", "--out", type=str, default=None)
+
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
 
@@ -1006,6 +1025,30 @@ def main(argv: list[str] | None = None) -> int:
             _emit(payload, args.out)
             return 0
         parser.parse_args(["suite", "--help"])
+        return 0
+
+    if args.command == "skilling":
+        from autocausal.skilling import SkillDrill, skill_catalog
+
+        if args.skilling_cmd == "list":
+            cat = skill_catalog()
+            if args.fmt == "json":
+                payload = json.dumps(cat, indent=2, default=str)
+            else:
+                drill = SkillDrill()
+                payload = drill.to_markdown()
+            _emit(payload, args.out)
+            return 0
+        if args.skilling_cmd == "drill":
+            drill = SkillDrill(skill=getattr(args, "skill", "skill:autocleanse"), use_slm=False)
+            trace = drill.run()
+            if args.fmt == "json":
+                payload = trace.to_json()
+            else:
+                payload = drill.to_markdown()
+            _emit(payload, args.out)
+            return 0
+        parser.parse_args(["skilling", "--help"])
         return 0
 
     parser.print_help()

@@ -1,125 +1,121 @@
 # Auto suites — AutoCleanse / AutoEDA / AutoMine
 
-Library-first suites under `autocausal.suites`. Every **auto\*** path is
-**SLM-directed** when HuggingFace is available, with a deterministic rule
-fallback that never hard-crashes offline.
+Library-first suites under `autocausal.suites.*` with **dedicated action
+modules**. Every **auto\*** path is **SLM-directed** via
+`SLMAutoDirector` + `autocausal.skilling` ToolSurface when available;
+deterministic rules always work offline.
 
 > Epistemic honesty: suite reports are hygiene / exploration aids. They do
-> **not** identify causal effects. SLM text is generative assistance only.
+> **not** identify causal effects. SLM text/tools are generative assistance.
 
-## Install / env
+## Module tree
 
-```bash
-pip install -e ".[dev]"
-pip install -e ".[slm]"   # optional torch + transformers
 ```
+autocausal/suites/
+  __init__.py
+  director.py              # SLMAutoDirector
+  action_protocol.py
+  base.py
+  autocleanse/
+    __init__.py
+    suite.py               # AutoCleanseSuite
+    actions.py             # CleanseActions + CLEANSE_REGISTRY
+    report.py
+  autoeda/
+    __init__.py
+    suite.py
+    actions.py             # EDAActions
+    report.py
+  automine/
+    __init__.py
+    suite.py
+    actions.py             # MineActions
+    report.py
 
-| Variable | Effect |
-|----------|--------|
-| `AUTOCAUSAL_SLM=1` | Prefer HuggingFace SLM director |
-| `AUTOCAUSAL_SLM_MODEL` | Model id (default `sshleifer/tiny-gpt2` for tests) |
-
-Default for suites and `AutoCausal.auto()`: **try SLM**, soft-fail to rules.
-Pass `use_slm=False` to force the rule director.
+autocausal/skilling/       # structured SLM tools wrapping suite actions
+  surface.py / registry.py / broker.py / catalog.py / trace.py
+```
 
 ## Public API (preferred)
 
 ```python
-from autocausal import (
-    AutoCausal,
-    AutoCleanseSuite,
-    AutoEDASuite,
-    AutoMineSuite,
-    SLMAutoDirector,
-)
+from autocausal.suites.autocleanse import AutoCleanseSuite, CleanseActions
+from autocausal.suites.autoeda import AutoEDASuite, EDAActions
+from autocausal.suites.automine import AutoMineSuite, MineActions
+from autocausal import AutoCausal
 
-df = ...  # DataFrame, or pass a path / AutoCausal
+# Direct actions
+CleanseActions.impute(df, method="auto")
+EDAActions.suggest_roles(df)
+MineActions.mine_associations(df)
+print(CleanseActions.list())
 
-# 1) Standalone suites
+# SLM-directed suites
 clean = AutoCleanseSuite(df, use_slm=True).run()
-print(clean.report.to_markdown())
 eda = AutoEDASuite(clean.frame, use_slm=True).run()
 mine = AutoMineSuite(clean.frame, use_slm=True).run()
-print(mine.report.to_mine_report()["schema"])  # MineReport.v1
 
-# 2) Fluent AutoCausal chain (use_slm passed through)
-ac = (
-    AutoCausal.from_dataframe(df)
-    .cleanse(use_slm=True)
-    .eda(use_slm=True)
-    .automine(use_slm=True)
-)
-result = ac.discover()
-assert ac.cleanse_report is not None
-assert ac.eda_report is not None
-assert ac.mine_report is not None
-
-# 3) Orchestrated auto() — cleanse + automine + discover (SLM by default)
-auto = AutoCausal.auto("data.csv", use_slm=True, cleanse=True, eda=False)
+ac = AutoCausal.from_dataframe(df).cleanse().eda().automine()
 ```
 
-Also: `from autocausal.suites import auto_cleanse, auto_eda, auto_mine`.
+## Dedicated actions
 
-## How SLM directs each suite
+### AutoCleanse (`CleanseActions`)
 
-Shared director: `autocausal.suites.director.SLMAutoDirector`.
+| Action | Role |
+|--------|------|
+| `profile_missingness` | Missingness profile (read-only) |
+| `coerce_types` | Object → numeric/datetime |
+| `drop_duplicates` | Exact duplicate rows |
+| `drop_high_null_cols` | Drop near-all-null columns |
+| `drop_constant_cols` | Drop constant columns |
+| `flag_outliers` | Z-score flag / winsorize |
+| `impute` | Via `autocausal.impute` |
+| `strip_id_leakage` | ID / leakage-name flags |
+| `qc_snapshot` | `validate_frame` |
 
-| Suite | Director stage | What SLM/rules propose | What is applied |
-|-------|----------------|------------------------|-----------------|
-| **AutoCleanseSuite** | `cleanse` | drop / impute / coerce / outlier columns | Feasible hygiene ops + existing `impute_dataframe` + QC |
-| **AutoEDASuite** | `eda` | focus columns, role hypotheses (X/Y/Z/W), analyses | Distributions, corr, cardinality, QC, leakage hints |
-| **AutoMineSuite** | `mine` | KPI focus, join sources, association priority | `autocausal.mining.mine` + optional public join + soft DataMine |
+### AutoEDA (`EDAActions`)
 
-Reports always include `slm_directives` (dict) and label generative text with
-epistemic caveats. Backend is `rule` offline, or `huggingface:…` when SLM runs.
+| Action | Role |
+|--------|------|
+| `summarize_distributions` | Numeric summaries |
+| `correlation_matrix` | Pairwise corr |
+| `cardinality_report` | nunique / missing |
+| `suggest_roles` | X/Y/Z/W hypotheses |
+| `qc_snapshot` | QC gate |
+| `leakage_hints` | Name + corr leakage |
+| `mining_profile` | Soft mining profile |
 
-```python
-from autocausal.suites import SLMAutoDirector
+### AutoMine (`MineActions`)
 
-d = SLMAutoDirector(use_slm=True).direct("cleanse", df, text="prep for IV")
-print(d.to_markdown())
-print(d.drop_columns, d.impute_columns)
-```
+| Action | Role |
+|--------|------|
+| `mine_associations` | `autocausal.mining.mine` |
+| `mine_kpi_hints` | KPI-like columns |
+| `join_public_sources` | Optional public join |
+| `mine_behavioral` | Soft behavioral |
+| `rank_candidates` | Rank associations |
+| `to_mine_report` | Fabric MineReport.v1 |
 
-## Suite responsibilities
+## SLM skilling
 
-### AutoCleanseSuite
-
-- Missingness profile, type coercion, duplicate/constant drops, outlier winsorize
-- Optional impute via existing `autocausal.impute`
-- Output: cleaned frame + `CleanseReport` (`to_dict` / `to_markdown` / `write`)
-- Hook: `ac.cleanse()` or `AutoCleanseSuite(df).run().to_autocausal()`
-
-### AutoEDASuite
-
-- Distributions, correlations, cardinality, suggested roles, QC, leakage hints
-- Soft hook to mining profiles; plots optional (skip without matplotlib)
-- Output: `EDAReport`
-
-### AutoMineSuite
-
-- Wraps `autocausal.mining` + optional public joins
-- Soft `datamine_adapter` if DataMineLib is on path
-- Output: `MineReport` with Fabric `to_mine_report()`
-
-## Insight / broader auto loop
-
-- `AutoCausal.auto(..., use_slm=True)` — default try-SLM; runs cleanse → automine → discover → guide
-- `InsightSuite(use_slm=True).run_loop(...)` — recommended; constructor still defaults `False` for 0.8 compat, but **auto\*** means SLM-directed when you opt in / set `AUTOCAUSAL_SLM=1`
+See [SLM_SKILLING.md](SLM_SKILLING.md). Tools are named `autocleanse.impute`,
+`autoeda.suggest_roles`, … and bundled into skills
+`skill:autocleanse` / `skill:autoeda` / `skill:automine` /
+`skill:autocausal_loop`.
 
 ## CLI (thin)
-
-Prefer the library API. CLI mirrors it:
 
 ```bash
 python -m autocausal suite cleanse --csv data.csv --no-slm -o cleanse.md
 python -m autocausal suite eda --csv data.csv -o eda.md
 python -m autocausal suite mine --csv data.csv --format json -o mine.json
+python -m autocausal skilling list
 ```
 
-## Soft siblings
+## Env
 
-Patterns inspired by (not hard-required):
-
-- `research/CausalIVSuite` — `auto_cleanse` / `autoeda`
-- `research/DataMineLib` — via `autocausal.datamine_adapter`
+| Variable | Effect |
+|----------|--------|
+| `AUTOCAUSAL_SLM=1` | Prefer HuggingFace SLM director / tool selection |
+| `AUTOCAUSAL_SLM_MODEL` | Model id |

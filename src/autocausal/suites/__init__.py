@@ -2,24 +2,25 @@
 
 Library-first API::
 
-    from autocausal import AutoCleanseSuite, AutoEDASuite, AutoMineSuite, AutoCausal
+    from autocausal.suites.autocleanse import AutoCleanseSuite, CleanseActions
+    from autocausal.suites.autoeda import AutoEDASuite, EDAActions
+    from autocausal.suites.automine import AutoMineSuite, MineActions
+    from autocausal.skilling import suite_tool_surface, SLMToolBroker
 
+    CleanseActions.impute(df, method="auto")
     clean = AutoCleanseSuite(df, use_slm=True).run()
-    eda = AutoEDASuite(clean.frame, use_slm=True).run()
-    mine = AutoMineSuite(clean.frame, use_slm=True).run()
-    ac = AutoCausal.from_dataframe(clean.frame).cleanse().eda().automine().discover()
 
 Every ``auto*`` path is directed by :class:`~autocausal.suites.director.SLMAutoDirector`
-when available; deterministic rules always work offline (never hard-crash).
+via the skilling ToolSurface when available; deterministic rules always work offline.
 
-Env: ``AUTOCAUSAL_SLM=1``. Docs: ``docs/SUITES.md``.
+Env: ``AUTOCAUSAL_SLM=1``. Docs: ``docs/SUITES.md``, ``docs/SLM_SKILLING.md``.
 """
 
 from __future__ import annotations
 
-from autocausal.suites.autocleanse import AutoCleanseSuite, CleanseReport, auto_cleanse
-from autocausal.suites.autoeda import AutoEDASuite, EDAReport, auto_eda
-from autocausal.suites.automine import AutoMineSuite, MineReport, auto_mine
+from autocausal.suites.autocleanse import AutoCleanseSuite, CleanseActions, CleanseReport, auto_cleanse
+from autocausal.suites.autoeda import AutoEDASuite, EDAActions, EDAReport, auto_eda
+from autocausal.suites.automine import AutoMineSuite, MineActions, MineReport, auto_mine
 from autocausal.suites.director import (
     EPISTEMIC_NOTE,
     SLMAutoDirector,
@@ -32,6 +33,9 @@ __all__ = [
     "AutoCleanseSuite",
     "AutoEDASuite",
     "AutoMineSuite",
+    "CleanseActions",
+    "EDAActions",
+    "MineActions",
     "CleanseReport",
     "EDAReport",
     "MineReport",

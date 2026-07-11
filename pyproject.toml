@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autocausal"
-version = "0.9.0"
+version = "0.9.1"
 description = "Auto-impute, SLM-directed AutoCleanse/AutoEDA/AutoMine suites, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLM→PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"

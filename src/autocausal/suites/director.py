@@ -95,6 +95,8 @@ class SLMDirectives:
     association_pairs: list[dict[str, str]] = field(default_factory=list)
     join_sources: list[str] = field(default_factory=list)
     mine_actions: list[str] = field(default_factory=list)
+    # ordered dedicated action names for the suite registry
+    actions: list[str] = field(default_factory=list)
     # shared
     notes: list[str] = field(default_factory=list)
     raw_text: str = ""
@@ -103,6 +105,9 @@ class SLMDirectives:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["continue"] = d.pop("continue_", True)
+        tools = getattr(self, "_tools_invoked", None)
+        if tools:
+            d["tools_invoked"] = list(tools)
         return d
 
     def to_markdown(self) -> str:
@@ -129,6 +134,8 @@ class SLMDirectives:
             lines.append(f"- KPI focus: {', '.join(f'`{k}`' for k in self.kpi_focus)}")
         if self.join_sources:
             lines.append(f"- Join sources: {', '.join(self.join_sources)}")
+        if self.actions:
+            lines.append(f"- Actions: {', '.join(f'`{a}`' for a in self.actions)}")
         if self.notes:
             lines.append("")
             lines.append("## Notes")
@@ -171,17 +178,55 @@ class SLMAutoDirector:
 
         plan = self._rule_direct(stage, df, profile=profile, text=text, context=ctx)
 
+        # Prefer tool-surface action sequence via skilling broker (rule or SLM)
+        tools_invoked: list[dict[str, Any]] = []
+        try:
+            from autocausal.skilling import SLMToolBroker
+
+            skill_map = {
+                "cleanse": "skill:autocleanse",
+                "eda": "skill:autoeda",
+                "mine": "skill:automine",
+                "auto": "skill:autocausal_loop",
+            }
+            skill_id = skill_map.get(stage)
+            if skill_id:
+                broker = SLMToolBroker(use_slm=self.use_slm, model_name=self.model_name)
+                calls = broker.select_tools(
+                    skill_id, text=text, context={"columns": profile.get("columns")}
+                )
+                # Map tool names → short action names for suite registries
+                actions: list[str] = []
+                for call in calls:
+                    name = str(call.get("name") or "")
+                    short = name.split(".", 1)[-1] if "." in name else name
+                    if short and short not in actions:
+                        actions.append(short)
+                    tools_invoked.append({"tool": name, "arguments": call.get("arguments") or {}})
+                if actions:
+                    plan.actions = actions
+                plan.notes.append("Director preferred ToolSurface / SLMToolBroker action sequence.")
+        except Exception as e:
+            plan.notes.append(f"Skilling broker soft-skip: {type(e).__name__}: {e}")
+
         if not self.use_slm:
             plan.notes.append("use_slm=False — rule director only.")
+            if tools_invoked:
+                # stash on notes via dict later — attach after enrich
+                pass
+            # Attach tools_invoked onto a transient attribute for suites
+            plan._tools_invoked = tools_invoked  # type: ignore[attr-defined]
             return plan
 
         enriched = self._slm_enrich(plan, stage=stage, profile=profile, text=text, context=ctx)
         if enriched is not None:
+            enriched._tools_invoked = tools_invoked  # type: ignore[attr-defined]
             return enriched
         plan.notes.append(
             "SLM requested but unavailable/failed — using rule SLMAutoDirector."
         )
         plan.backend = "rule"
+        plan._tools_invoked = tools_invoked  # type: ignore[attr-defined]
         return plan
 
     def _rule_direct(
@@ -270,6 +315,17 @@ class SLMAutoDirector:
         if stage == "cleanse":
             d.analyses = ["missingness", "coerce", "duplicates", "outliers", "impute"]
             d.mine_actions = []
+            d.actions = [
+                "profile_missingness",
+                "coerce_types",
+                "drop_high_null_cols",
+                "drop_constant_cols",
+                "drop_duplicates",
+                "strip_id_leakage",
+                "flag_outliers",
+                "impute",
+                "qc_snapshot",
+            ]
         elif stage == "eda":
             d.analyses = [
                 "distributions",
@@ -278,6 +334,15 @@ class SLMAutoDirector:
                 "role_hypotheses",
                 "qc",
                 "leakage_hints",
+            ]
+            d.actions = [
+                "summarize_distributions",
+                "correlation_matrix",
+                "cardinality_report",
+                "suggest_roles",
+                "qc_snapshot",
+                "leakage_hints",
+                "mining_profile",
             ]
             if d.focus_columns:
                 d.notes.append(f"EDA focus prioritized: {d.focus_columns[:6]}")
@@ -297,10 +362,19 @@ class SLMAutoDirector:
             )
             d.kpi_focus = [c for c in cols if any(h in c.lower() for h in kpi_hints)][:8]
             d.mine_actions = ["profile", "associate", "suggest_kpis"]
+            d.actions = [
+                "mine_associations",
+                "mine_kpi_hints",
+                "rank_candidates",
+                "to_mine_report",
+            ]
             # Soft public join suggestions (offline ids)
             if not context.get("skip_join"):
                 d.join_sources = ["demographics_demo", "finance_demo"][:1]
                 d.mine_actions.append("join_public")
+                d.actions.insert(0, "join_public_sources")
+            if context.get("include_behavioral"):
+                d.actions.append("mine_behavioral")
 
         if n_rows < 5:
             d.continue_ = False

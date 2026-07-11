@@ -42,10 +42,17 @@ __all__ = [
     "AutoCleanseSuite",
     "AutoEDASuite",
     "AutoMineSuite",
+    "CleanseActions",
+    "EDAActions",
+    "MineActions",
     "CleanseReport",
     "EDAReport",
     "MineReport",
     "SLMAutoDirector",
+    "ToolSurface",
+    "SkillRegistry",
+    "SLMToolBroker",
+    "suite_tool_surface",
 ]
 
 
@@ -109,6 +116,9 @@ def __getattr__(name: str):
         "AutoCleanseSuite",
         "AutoEDASuite",
         "AutoMineSuite",
+        "CleanseActions",
+        "EDAActions",
+        "MineActions",
         "CleanseReport",
         "EDAReport",
         "MineReport",
@@ -121,4 +131,18 @@ def __getattr__(name: str):
         from autocausal import suites as _suites
 
         return getattr(_suites, name)
+    if name in (
+        "ToolSurface",
+        "SkillRegistry",
+        "SLMToolBroker",
+        "suite_tool_surface",
+        "skill_catalog",
+        "SkillDrill",
+        "SkillTrace",
+        "ToolDef",
+        "ToolResult",
+    ):
+        from autocausal import skilling as _sk
+
+        return getattr(_sk, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")
