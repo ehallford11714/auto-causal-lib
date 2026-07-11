@@ -45,8 +45,10 @@ Doc index: [INDEX.md](INDEX.md) · Modules: [MODULES.md](MODULES.md) · Backends
 from autocausal import AutoCausal
 
 ac = AutoCausal.from_csv("data.csv")   # or from_parquet / from_sqlalchemy / from_dataframe
-ac.mine().impute().discover(qc="warn", use_iv=True)
-print(ac.report())
+result = ac.mine().impute().discover(qc="warn", use_iv=True)
+print(ac.report())           # markdown from last DiscoveryResult
+print(result.report())       # same via DiscoveryResult.report() alias
+print(result.to_markdown())  # explicit
 print(ac.result.to_json())
 ```
 
@@ -68,6 +70,7 @@ ac.estimate(backend="econml")
 ac.refute(method="placebo")
 ac.refute(method="dowhy")              # real DoWhy when installed
 from autocausal.engines import list_engines, engine_status, connectivity_map
+# also: from autocausal import list_engines, engine_status
 engine_status()
 ```
 

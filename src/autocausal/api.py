@@ -1062,12 +1062,18 @@ class AutoCausal:
         )
 
     def report(self, *, as_markdown: bool = True) -> str:
+        """Render the last ``DiscoveryResult`` as markdown or JSON.
+
+        After ``discover()``, prefer either::
+
+            print(ac.report())
+            print(ac.result.report())   # same markdown via DiscoveryResult.report
+            print(result.to_markdown()) # explicit
+        """
         if self.result is None:
             self.discover()
         assert self.result is not None
-        if as_markdown:
-            return self.result.to_markdown()
-        return self.result.to_json()
+        return self.result.report(as_markdown=as_markdown)
 
     def run(
         self,

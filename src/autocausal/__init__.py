@@ -42,6 +42,8 @@ __all__ = [
     "estimate",
     "list_engines",
     "engine_status",
+    "discover_with",
+    "connectivity_map",
     "AutoCleanseSuite",
     "AutoEDASuite",
     "AutoMineSuite",

@@ -70,6 +70,15 @@ class DiscoveryResult:
 
         return render_markdown_report(self)
 
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``.
+
+        Prefer ``result.report()`` or ``ac.report()`` after ``discover()``.
+        """
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
     def to_causal_edges(self) -> list[dict[str, Any]]:
         """Export edges as CausalEdge.v1 envelopes (shared Fabric contract)."""
         from autocausal.contracts import edges_to_causal_edge_envelopes
@@ -125,6 +134,12 @@ class AutoResult:
         from autocausal.report import render_auto_markdown
 
         return render_auto_markdown(self)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
 
     def to_fabric_bundle(
         self,

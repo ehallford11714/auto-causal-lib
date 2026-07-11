@@ -106,8 +106,13 @@ from autocausal import AutoCausal
 
 ac = AutoCausal.from_csv("data.csv")
 result = ac.run()          # impute + discover
-print(ac.report())         # markdown
+print(ac.report())         # markdown (AutoCausal.report)
+print(result.report())     # same via DiscoveryResult.report()
 print(result.to_json())    # graph + edges + candidates
+
+# Engines connectivity (list / status / estimate / refute)
+from autocausal.engines import list_engines, engine_status
+print(engine_status()["n"], "engines")
 
 # 0.8: stability, QC, fabric, NLP→guide
 ac.enrich_from_text("Does spend cause sales?")
