@@ -1,120 +1,127 @@
 # AutoCausalLib — Library API map
 
-Library-first public surface for **autocausal** 0.8+. Prefer importing from
-submodules in apps/notebooks; the top-level package re-exports the most common
-symbols. CLI (`python -m autocausal`) is a thin wrapper.
+Prefer importing from submodules; the top-level package lazy-re-exports common symbols.
+CLI (`python -m autocausal`) is a thin wrapper — see [CLI.md](CLI.md).
 
-> Epistemic honesty: discovery, mining, NLP hints, and refute stubs are
-> **exploratory**. They do not guarantee causal identification.
+> **Epistemic honesty:** discovery, mining, NLP hints, SLM text, estimate/refute, and agent loops are **exploratory**. They do not guarantee causal identification. Soft engines soft-skip when missing.
 
-## Core
+**Install (PyPI name ≠ import name):**
 
-| Import | Role |
-|--------|------|
-| `from autocausal import AutoCausal` | Load → impute → discover → guide/direct |
-| `from autocausal import DiscoveryResult, AutoResult` | Structured outputs |
-| `AutoCausal.from_csv` / `from_parquet` / `from_sqlalchemy` / `from_dataframe` | Ingest |
-| `ac.impute()` / `ac.mine()` / `ac.discover()` / `ac.run()` | Pipeline steps |
-| `AutoCausal.auto(path, …)` | Orchestrated load→mine→impute→discover→guide→ground→sensitivity |
-
-### Discovery (0.8)
-
-```python
-ac.discover(stability=True, bootstrap_n=20)          # per-edge stability → honest confidence
-ac.discover(ensemble=True)                           # pc_lite + corr_skeleton + mi_stub consensus
-ac.discover_ensemble(methods=["score_pc_lite", "corr_skeleton", "mi_stub"])
+```bash
+pip install auto-causal-lib          # PyPI distribution name
+python -c "import autocausal; print(autocausal.__version__)"
 ```
 
-### QC gate
+Do **not** rely on `pip install autocausal` — that name was rejected / may resolve to a different project. Always install **`auto-causal-lib`**, then **`import autocausal`**.
+
+Doc index: [INDEX.md](INDEX.md) · Modules: [MODULES.md](MODULES.md) · Backends: [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).
+
+---
+
+## Top-level exports (`import autocausal`)
+
+| Symbol | Source |
+|--------|--------|
+| `AutoCausal`, `DiscoveryResult`, `AutoResult`, `__version__` | api / results |
+| `create_from_context`, `infer_from_results`, `slm_status` | slm |
+| `list_tools`, `validate_pipeline`, `refute` | suite_tools |
+| `estimate`, `list_engines`, `engine_status` | engines |
+| `list_guides`, `direct` | guides |
+| `KPIMinedCausalLoop`, `ModelConstructPlan` | ml |
+| `PublicCausalMiner`, `PublicCausalReport`, `mine_public` | public_causal |
+| `TextCausalHints`, `NlpFeatureBuilder`, `extract_causal_hints_from_text` | nlp |
+| `BehavioralTraceStore`, `mine_behavioral_traces` | behavioral |
+| `InsightSuite`, `InsightReport`, `ExperimentRecommender`, `run_insight_loop` | insight |
+| `load_dataset`, `list_datasets` | datasets |
+| `validate_frame`, `QCReport` | qc |
+| `align`, `PanelSpec` | join / panel |
+| Suites / skilling / grail / agentic / AgentHook | suites, skilling, grail, agentic, connective |
+
+---
+
+## Core pipeline
 
 ```python
-from autocausal.qc import validate_frame
-report = validate_frame(df)          # QCReport
-ac.validate_qc(mode="warn")          # or mode="block"
-ac.discover(qc="warn")               # hooked before discover
+from autocausal import AutoCausal
+
+ac = AutoCausal.from_csv("data.csv")   # or from_parquet / from_sqlalchemy / from_dataframe
+ac.mine().impute().discover(qc="warn", use_iv=True)
+print(ac.report())
+print(ac.result.to_json())
 ```
 
-### NLP → guide/direct
+### Discovery
 
 ```python
-ac.enrich_from_text("Randomized spend increases revenue")
-ac.guide(text="…")   # auto-calls enrich_from_text
-ac.direct(text="…")
+ac.discover(stability=True, bootstrap_n=20)
+ac.discover(ensemble=True, include_optional=True)  # appends installed soft backends
+ac.discover(method="causal_learn_pc")              # soft; falls back to pc_lite
+ac.discover(methods=["score_pc_lite", "lingam", "gcastle_notears"], min_methods=1)
 ```
 
-## Fabric contracts
-
-Aligned with `research/shared_contracts` (MineReport / CausalEdge / InsightPack).
+### Estimate / refute / engines
 
 ```python
-from autocausal.contracts import fabric_bundle
-from autocausal.mining import mine
-
-mr = mine(df).to_mine_report()                 # MineReport.v1
-edges = ac.discover().to_causal_edges()        # list[CausalEdge.v1]
-bundle = ac.to_fabric_bundle()                 # FabricBundle.v1
-dag = ac.result.to_search_dag()                # SearchDAG.v1 (soft CausalSearch)
-auto = AutoCausal.auto("data.csv")
-bundle2 = auto.to_fabric_bundle()
-```
-
-## Panel / join / IV handoff
-
-```python
-from autocausal.panel import PanelSpec, panel_lag
-from autocausal.join import align
-
-ac.set_panel("unit_id", "year", treatment="t", outcome="y")
-ac.panel_features(["y", "x"], kind="lag")
-
-joined, report = align([df_a, df_b], keys=["id"], how="outer")
-ac.join_frames(df_b, keys="id")
-
-spec = ac.to_causaliv_request()   # CausalIVRequest.v1 soft dict
-```
-
-## Sensitivity & refute & estimate (0.11)
-
-```python
-sens = ac.sensitivity(text="physics rollout")
-ref = ac.refute(method="placebo")              # builtin
-ref2 = ac.refute(method="dowhy")               # real DoWhy when installed; else soft-skip
-est = ac.estimate(backend="doubleml")          # soft DoubleML PLR
-est2 = ac.estimate(backend="econml")           # soft EconML CATE
-from autocausal.engines import list_engines, engine_status
+ac.estimate(backend="builtin_ols")     # always
+ac.estimate(backend="doubleml")        # soft-skip if missing
+ac.estimate(backend="econml")
+ac.refute(method="placebo")
+ac.refute(method="dowhy")              # real DoWhy when installed
+from autocausal.engines import list_engines, engine_status, connectivity_map
 engine_status()
 ```
 
-See [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).
-
-## SQL chunked / sampled
+### QC / NLP / fabric / panel
 
 ```python
-ac = AutoCausal.from_sqlalchemy(
-    "sqlite:///demo.db", table="events",
-    chunksize=5000, sample_n=2000, sample_seed=0,
-)
+from autocausal.qc import validate_frame
+ac.validate_qc(mode="warn")
+ac.enrich_from_text("Does spend cause sales?")
+ac.to_fabric_bundle()
+ac.to_causaliv_request()
+ac.set_panel("unit_id", "year", outcome="y")
+ac.panel_features(["y"], kind="lag")
 ```
 
-## NLP / behavioral / public / insight
+### Orchestrated
 
-| Module | Entry |
-|--------|-------|
-| `autocausal.nlp` | `TextCausalHints`, `extract_causal_hints_from_text`, `NlpFeatureBuilder` |
-| `autocausal.behavioral` | `BehavioralTraceStore`, `mine_behavioral_traces` |
-| `autocausal.public_suite` / `public_causal` | `load_public`, `mine_public` |
-| `autocausal.insight` | `InsightSuite`, `run_insight_loop` |
-| `autocausal.suites` | `AutoCleanseSuite`, `AutoEDASuite`, `AutoMineSuite`, `SLMAutoDirector` (SLM-directed; [SUITES.md](SUITES.md)) |
-| `autocausal.datasets` | `load_dataset`, `list_datasets` (cache + soft network) |
-| `autocausal.physics` | `PhysicsCausalSuite` |
-| `autocausal.ml` | `KPIMinedCausalLoop` |
+```python
+AutoCausal.auto("data.csv", text="…", use_slm=False)
+ac.insight_loop(text="…")
+ac.agentic_loop(text="…", max_rounds=2)
+ac.physics_loop(horizon=5)
+ac.ml_loop(text="…", use_torch=False)
+```
 
-## Imputation diagnostics
+---
 
-`ImputationReport.mechanism_hint` ∈ `{none, MCAR_plausible, MAR_suspected, MNAR_possible, unknown}`
-plus `mechanism_notes` / `diagnostics` (heuristic — not Little's MCAR).
+## Module groups (summary)
+
+| Group | Import path | See |
+|-------|-------------|-----|
+| Core tabular | `ingest`, `impute`, `mining`, `discovery`, `roles`, `iv`, `qc`, `join`, `panel` | [MODULES.md](MODULES.md) |
+| Soft backends | `autocausal.backends.*`, `autocausal.engines` | [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md) |
+| Suites / skilling | `autocausal.suites`, `autocausal.skilling` | [SUITES.md](SUITES.md), [SLM_SKILLING.md](SLM_SKILLING.md) |
+| Insight / agentic / GRAIL | `insight`, `agentic`, `grail` | area docs |
+| MCP | `autocausal.mcp`, `autocausal.connective` | [MCP.md](MCP.md) |
+| NLP / behavioral | `nlp`, `behavioral` | [NLP_AND_BEHAVIORAL_TRACES.md](NLP_AND_BEHAVIORAL_TRACES.md) |
+| Physics / ML | `physics`, `ml` | [PHYSICS_DEMO.md](PHYSICS_DEMO.md), [ML_KPI_LOOP.md](ML_KPI_LOOP.md) |
+| Data | `datasets`, `public_suite`, `public_causal` | [EXAMPLES.md](EXAMPLES.md) |
+
+---
+
+## Extras
+
+| Extra | Provides |
+|-------|----------|
+| *(none)* | numpy, pandas, sqlalchemy — full core + insight/mcp code/skilling/cli/engines |
+| `causal-extra` | causal-learn, dowhy, DoubleML, econml, lingam, gcastle, sklearn |
+| `mcp` | `mcp` SDK for stdio server (`AgentHook` works without it) |
+| `nlp` / `slm` / `ml` / `ui` / `web` | NLTK, torch/transformers, sklearn, Streamlit, httpx |
+| `all` | union of the above + DB drivers |
+
+---
 
 ## Version
 
-See `autocausal.__version__` (0.11.0+). Roadmap: [ROADMAP.md](ROADMAP.md).
-Backends: [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).
+`autocausal.__version__` (0.11.x+). Roadmap: [ROADMAP.md](ROADMAP.md).

@@ -1,0 +1,7 @@
+include docs/*.md
+include README.md
+include LICENSE*
+include DATASETS.md
+graft src/autocausal/data
+graft src/autocausal/ml/schemas
+global-exclude __pycache__ *.py[cod] .git*

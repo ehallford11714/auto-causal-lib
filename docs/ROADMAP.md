@@ -1,5 +1,11 @@
 # AutoCausalLib roadmap
 
+## Shipped in 0.11.1 — docs + packaging
+
+- [x] Comprehensive docs: INDEX / MODULES / CLI / MCP / LIBRARY_API / CAUSAL_BACKENDS
+- [x] README callout: `pip install auto-causal-lib` → `import autocausal`
+- [x] MANIFEST.in includes docs in sdist; wheel verified in clean venv
+
 ## Shipped in 0.11.0 — causal backends + engine connectivity
 
 - [x] Soft `causal-learn` PC / GES / FCI discovery adapters

@@ -4,12 +4,14 @@ Expose AutoCausalLib to other agents via the [Model Context Protocol](https://mo
 
 > Exploratory edges ≠ causal identification. Tool outputs are assistance for human review.
 
+**Install:** `pip install "auto-causal-lib[mcp]"` then `import autocausal` (PyPI name is **not** `autocausal`).
+
 ## Install
 
 ```bash
-cd research/AutoCausalLib
+pip install "auto-causal-lib[mcp]"
+# or from source:
 pip install -e ".[mcp]"
-# or: pip install "mcp>=1.0" && pip install -e .
 ```
 
 Core library imports stay intact without `mcp`. Only the stdio server needs the SDK.
@@ -18,91 +20,44 @@ Core library imports stay intact without `mcp`. Only the stdio server needs the 
 
 ```bash
 python -m autocausal.mcp
-# or console script:
 autocausal-mcp
-
-# list tools without starting stdio:
 python -m autocausal.mcp --list-tools
+python -m autocausal mcp --list-tools
 ```
 
 ## Cursor (`mcp.json`)
 
-Add to Cursor MCP settings (user or project `.cursor/mcp.json`):
-
 ```json
 {
   "mcpServers": {
     "autocausal": {
       "command": "python",
       "args": ["-m", "autocausal.mcp"],
-      "env": {
-        "PYTHONUNBUFFERED": "1"
-      }
+      "env": { "PYTHONUNBUFFERED": "1" }
     }
   }
 }
 ```
 
-If you use a venv:
-
-```json
-{
-  "mcpServers": {
-    "autocausal": {
-      "command": "C:/path/to/venv/Scripts/python.exe",
-      "args": ["-m", "autocausal.mcp"],
-      "cwd": "C:/Users/you/research/AutoCausalLib",
-      "env": {
-        "PYTHONUNBUFFERED": "1"
-      }
-    }
-  }
-}
-```
-
-Windows tip: prefer the venv’s `python.exe` and set `PYTHONUNBUFFERED=1` so stdio JSON-RPC stays line-buffered.
-
-## Claude Desktop
-
-Edit Claude Desktop config (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "autocausal": {
-      "command": "python",
-      "args": ["-m", "autocausal.mcp"],
-      "env": {
-        "PYTHONUNBUFFERED": "1"
-      }
-    }
-  }
-}
-```
+Prefer a venv `python.exe` on Windows.
 
 ## Library-first (no MCP client)
 
-Same tools, in-process — useful for scripts, notebooks, and non-MCP agents:
-
 ```python
 from autocausal.connective import AgentHook
-# alias: from autocausal.mcp.hooks import AgentHook
 
 hook = AgentHook()
-print([t["name"] for t in hook.list_tools()])
-
+print(hook.list_names())
 r = hook.call_tool("autocausal_load_dataset", {"dataset_id": "iris"})
 assert r["ok"]
-print(hook.call_tool("autocausal_mine", {"use_suite": False}))
-print(hook.call_tool("autocausal_discover", {"use_iv": False, "min_abs_corr": 0.2}))
-print(hook.call_tool("autocausal_report", {"format": "markdown"})["markdown"][:500])
+print(hook.call_tool("autocausal_list_engines", {}))
+print(hook.call_tool("autocausal_discover", {"use_iv": False}))
+print(hook.call_tool("autocausal_estimate", {"backend": "builtin_ols"}))
+print(hook.call_tool("autocausal_refute", {"method": "placebo"}))
 ```
-
-Module helpers:
 
 ```python
 from autocausal.connective import call_tool, list_tools
-
 list_tools()
 call_tool("autocausal_list_datasets", {})
 ```
@@ -111,29 +66,35 @@ call_tool("autocausal_list_datasets", {})
 
 | Tool | Maps to |
 |------|---------|
-| `autocausal_list_datasets` | `autocausal.datasets.list_datasets` |
-| `autocausal_load_dataset` | `load_dataset` → session `AutoCausal` |
+| `autocausal_list_datasets` | `datasets.list_datasets` |
+| `autocausal_load_dataset` | `load_dataset` → session |
 | `autocausal_from_csv` | `AutoCausal.from_csv` |
-| `autocausal_cleanse` | `AutoCausal.cleanse` (soft → `impute`) |
+| `autocausal_cleanse` | `AutoCausal.cleanse` (soft → impute) |
 | `autocausal_eda` | `AutoCausal.eda` (soft → QC) |
-| `autocausal_mine` | `automine` / `mine` |
+| `autocausal_mine` | automine / `mine` |
 | `autocausal_discover` | `AutoCausal.discover` |
+| `autocausal_list_engines` | `engines.engine_status` |
+| `autocausal_estimate` | `engines.estimate` |
+| `autocausal_refute` | `AutoCausal.refute` |
 | `autocausal_insight_loop` | `InsightSuite` / `run_insight_loop` |
-| `autocausal_agentic_loop` | `AgenticCausalLoop` / `run_agentic_loop` ([docs/AGENTIC_LOOP.md](AGENTIC_LOOP.md)) |
-| `autocausal_recommend_experiments` | `ExperimentRecommender.recommend` |
-| `autocausal_public_mine` | `AutoCausal.mine_public` |
-| `autocausal_report` | `AutoCausal.report` (markdown/json) |
-| `autocausal_skilling_list` | `autocausal.skilling.skill_catalog` |
-| `autocausal_session_status` | active session metadata |
-| `autocausal_list_tools` | this registry’s schemas |
+| `autocausal_agentic_loop` | `AgenticCausalLoop` |
+| `autocausal_recommend_experiments` | `ExperimentRecommender` |
+| `autocausal_public_mine` | `mine_public` |
+| `autocausal_report` | `AutoCausal.report` |
+| `autocausal_skilling_list` | `skilling.skill_catalog` |
+| `autocausal_session_status` | session metadata |
+| `autocausal_list_tools` | registry schemas |
+| `autocausal_grail_*` | GRAIL soft tools (when registered) |
 
-Sessions: pass `session_id` (default `"default"`) so multi-step calls share one `AutoCausal` instance.
+Sessions: pass `session_id` (default `"default"`) so multi-step calls share one `AutoCausal`.
 
 ## Relation to skilling
 
-`autocausal.skilling.ToolSurface` wraps **suite actions** for SLM brokers (`autocleanse.impute`, …).  
-`autocausal.mcp` / `autocausal.connective` expose **library entry points** for external MCP/agents. They are complementary; `autocausal_skilling_list` can enumerate the skilling catalog.
+`autocausal.skilling.ToolSurface` wraps suite actions for SLM brokers.  
+`autocausal.mcp` / `connective` expose library entry points for external agents.
 
 ## Epistemic note
 
-Discovery, mining, insight narratives, and experiment suggestions are **exploratory**. Do not treat tool JSON as identified causal effects.
+Discovery, mining, insight narratives, estimates, and experiment suggestions are **exploratory**.
+
+See [INDEX.md](INDEX.md), [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md), [CLI.md](CLI.md).

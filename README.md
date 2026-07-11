@@ -38,6 +38,14 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 
 ## Install
 
+> **PyPI name:** `auto-causal-lib` · **Import:** `autocausal`  
+> `pip install autocausal` is **not** this project (name rejected as too similar to other packages). Always:
+>
+> ```bash
+> pip install auto-causal-lib
+> python -c "import autocausal; print(autocausal.__version__)"
+> ```
+
 From [PyPI](https://pypi.org/project/auto-causal-lib/):
 
 ```bash
@@ -65,6 +73,8 @@ python -m autocausal insight --help
 python -m autocausal skilling list
 python -m autocausal.mcp          # needs [mcp] for SDK; AgentHook works without it
 ```
+
+**Docs:** [docs/INDEX.md](docs/INDEX.md) (full map) · [docs/MODULES.md](docs/MODULES.md) · [docs/CLI.md](docs/CLI.md) · [docs/MCP.md](docs/MCP.md) · [docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md) · [docs/LIBRARY_API.md](docs/LIBRARY_API.md).
 
 From source (development):
 
