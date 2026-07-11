@@ -445,6 +445,53 @@ def _build_parser() -> argparse.ArgumentParser:
     sk_drill.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
     sk_drill.add_argument("-o", "--out", type=str, default=None)
 
+    # engines — unified causal backend connectivity
+    eng = sub.add_parser(
+        "engines",
+        help="List/status for discovery, estimate, refute, and package engines",
+    )
+    eng_sub = eng.add_subparsers(dest="engines_cmd")
+    eng_list = eng_sub.add_parser("list", help="List engines")
+    eng_list.add_argument(
+        "--kind",
+        choices=["discovery", "estimate", "refute", "package"],
+        default=None,
+    )
+    eng_list.add_argument("--format", choices=["json", "table"], default="table", dest="fmt")
+    eng_sub.add_parser("status", help="Full engine status + connectivity map")
+
+    # estimate
+    est = sub.add_parser("estimate", help="ATE/CATE via builtin / DoubleML / EconML")
+    _add_source_args(est)
+    est.add_argument(
+        "--backend",
+        type=str,
+        default="builtin_ols",
+        help="builtin_ols | doubleml | econml | econml_causal_forest | builtin_2sls",
+    )
+    est.add_argument("--y", type=str, default=None)
+    est.add_argument("--d", type=str, default=None)
+    est.add_argument("--x", type=str, default=None, help="Comma-separated controls")
+    est.add_argument("--z", type=str, default=None, help="Instrument (for 2SLS)")
+    est.add_argument("--discover", action="store_true", help="Mine candidates first")
+    est.add_argument("-o", "--out", type=str, default=None)
+
+    # refute
+    rf = sub.add_parser("refute", help="Refute edge via placebo or DoWhy")
+    _add_source_args(rf)
+    rf.add_argument(
+        "--method",
+        type=str,
+        default="placebo",
+        help="placebo | random_common_cause | dowhy | dowhy_data_subset | …",
+    )
+    rf.add_argument("--discover", action="store_true", help="Discover first to pick an edge")
+    rf.add_argument("-o", "--out", type=str, default=None)
+
+    # mcp — hint to stdio server
+    mcp_p = sub.add_parser("mcp", help="MCP server info (run: python -m autocausal.mcp)")
+    mcp_p.add_argument("--list-tools", action="store_true", dest="list_tools")
+
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
 
@@ -1049,6 +1096,67 @@ def main(argv: list[str] | None = None) -> int:
             _emit(payload, args.out)
             return 0
         parser.parse_args(["skilling", "--help"])
+        return 0
+
+    if args.command == "engines":
+        from autocausal.engines import engine_status, list_engines
+
+        if args.engines_cmd == "status" or args.engines_cmd is None:
+            print(json.dumps(engine_status(), indent=2, default=str))
+            return 0
+        if args.engines_cmd == "list":
+            rows = list_engines(kind=getattr(args, "kind", None))
+            if args.fmt == "json":
+                print(json.dumps([r.to_dict() for r in rows], indent=2))
+            else:
+                print(f"{'id':28} {'kind':10} {'avail':6} description")
+                for r in rows:
+                    avail = "yes" if r.available else "no*"
+                    print(f"{r.id:28} {r.kind:10} {avail:6} {r.description[:60]}")
+                print("\n* soft-optional — install auto-causal-lib[causal-extra] or [mcp]")
+            return 0
+        parser.parse_args(["engines", "--help"])
+        return 0
+
+    if args.command == "estimate":
+        ac = _load_ac(args)
+        if args.discover:
+            ac.mine()
+            ac.discover(qc="off", use_iv=False)
+        x = [s.strip() for s in args.x.split(",") if s.strip()] if args.x else None
+        res = ac.estimate(backend=args.backend, y=args.y, d=args.d, x=x, z=args.z)
+        text = json.dumps(res.to_dict(), indent=2, default=str)
+        _emit(text, args.out)
+        return 0 if res.ok else 1
+
+    if args.command == "refute":
+        ac = _load_ac(args)
+        if args.discover:
+            ac.mine()
+            ac.discover(qc="off", use_iv=False)
+        res = ac.refute(method=args.method)
+        text = json.dumps(res.to_dict() if hasattr(res, "to_dict") else res, indent=2, default=str)
+        _emit(text, args.out)
+        return 0 if getattr(res, "ok", True) else 1
+
+    if args.command == "mcp":
+        from autocausal.connective import list_tools
+
+        if args.list_tools:
+            print(json.dumps(list_tools(), indent=2, default=str))
+        else:
+            print(
+                json.dumps(
+                    {
+                        "run": "python -m autocausal.mcp",
+                        "extra": "pip install 'auto-causal-lib[mcp]'",
+                        "tools": list_tools(),
+                        "note": "AgentHook works without mcp SDK via autocausal.connective",
+                    },
+                    indent=2,
+                    default=str,
+                )
+            )
         return 0
 
     parser.print_help()

@@ -19,7 +19,29 @@ from autocausal.iv import try_iv_edges
 from autocausal.roles import ColumnRole, numeric_matrix
 
 
-DiscoveryMethod = Literal["score_pc_lite", "corr_skeleton", "mi_stub"]
+DiscoveryMethod = Literal[
+    "score_pc_lite",
+    "corr_skeleton",
+    "mi_stub",
+    "causal_learn_pc",
+    "causal_learn_ges",
+    "causal_learn_fci",
+    "lingam",
+    "direct_lingam",
+    "gcastle_notears",
+]
+
+BUILTIN_METHODS = frozenset({"score_pc_lite", "corr_skeleton", "mi_stub"})
+EXTERNAL_METHODS = frozenset(
+    {
+        "causal_learn_pc",
+        "causal_learn_ges",
+        "causal_learn_fci",
+        "lingam",
+        "direct_lingam",
+        "gcastle_notears",
+    }
+)
 
 
 def _pearson(x: np.ndarray, y: np.ndarray) -> float:
@@ -309,8 +331,29 @@ def _mi_stub_edges(
     return edges
 
 
+def _run_external_method(
+    method: str,
+    clean: pd.DataFrame,
+    cols: list[str],
+    *,
+    alpha: float,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Soft-call optional discovery backends; return (edges, notes)."""
+    from autocausal.engines import discover_with
+
+    raw = discover_with(clean, method=method, columns=cols, alpha=alpha)
+    notes = list(raw.get("notes") or [])
+    if raw.get("soft_skip"):
+        notes.append(f"{method}: soft-skipped (missing or insufficient data).")
+        return [], notes
+    if raw.get("error"):
+        notes.append(f"{method} error: {raw['error']}")
+        return [], notes
+    return list(raw.get("edges") or []), notes
+
+
 def _run_method(
-    method: DiscoveryMethod,
+    method: DiscoveryMethod | str,
     clean: pd.DataFrame,
     cols: list[str],
     *,
@@ -318,9 +361,13 @@ def _run_method(
     max_cond_size: int,
     min_abs_corr: float,
 ) -> list[dict[str, Any]]:
-    if method == "corr_skeleton":
+    m = str(method)
+    if m in EXTERNAL_METHODS:
+        edges, _notes = _run_external_method(m, clean, cols, alpha=alpha)
+        return edges
+    if m == "corr_skeleton":
         return _corr_skeleton_edges(clean, cols, min_abs_corr=min_abs_corr)
-    if method == "mi_stub":
+    if m == "mi_stub":
         return _mi_stub_edges(clean, cols, min_score=max(0.08, min_abs_corr * 0.8))
     return _pc_lite_edges(
         clean, cols, alpha=alpha, max_cond_size=max_cond_size, min_abs_corr=min_abs_corr
@@ -459,7 +506,7 @@ def discover_relationships(
     max_cond_size: int = 2,
     min_abs_corr: float = 0.15,
     use_iv: bool = True,
-    method: DiscoveryMethod = "score_pc_lite",
+    method: DiscoveryMethod | str = "score_pc_lite",
     stability: bool = False,
     bootstrap_n: int = 20,
     seed: int = 0,
@@ -467,8 +514,9 @@ def discover_relationships(
     from autocausal.results import DiscoveryResult
 
     mat, cols = numeric_matrix(df, roles)
+    method_s = str(method)
     notes: list[str] = [
-        "Exploratory heuristic discovery (PC-lite / lightweight methods). "
+        "Exploratory heuristic discovery (PC-lite / lightweight / soft backends). "
         "Not a guarantee of causal identification.",
     ]
     if len(cols) < 2:
@@ -477,7 +525,7 @@ def discover_relationships(
             graph={"nodes": list(df.columns), "edges": []},
             roles=roles,
             candidates={"treatment": [], "outcome": [], "instrument": [], "confounder": []},
-            method=method,
+            method=method_s,
             notes=notes + ["Fewer than 2 usable columns for discovery."],
         )
 
@@ -485,22 +533,33 @@ def discover_relationships(
     if len(clean) < 10:
         notes.append(f"Only {len(clean)} complete rows after encoding; results unstable.")
 
-    edges = _run_method(
-        method,
-        clean,
-        cols,
-        alpha=alpha,
-        max_cond_size=max_cond_size,
-        min_abs_corr=min_abs_corr,
-    )
+    if method_s in EXTERNAL_METHODS:
+        edges, ext_notes = _run_external_method(method_s, clean, cols, alpha=alpha)
+        notes.extend(ext_notes)
+        if not edges:
+            # Fall back to pc_lite so callers still get a graph
+            notes.append(f"{method_s} produced no edges — fell back to score_pc_lite.")
+            edges = _pc_lite_edges(
+                clean, cols, alpha=alpha, max_cond_size=max_cond_size, min_abs_corr=min_abs_corr
+            )
+            method_s = "score_pc_lite"
+    else:
+        edges = _run_method(
+            method_s,
+            clean,
+            cols,
+            alpha=alpha,
+            max_cond_size=max_cond_size,
+            min_abs_corr=min_abs_corr,
+        )
 
-    if stability:
+    if stability and method_s in BUILTIN_METHODS:
         n_boot = max(1, int(bootstrap_n))
         stab_map = _bootstrap_stability(
             clean,
             cols,
             edges,
-            method=method,
+            method=method_s,  # type: ignore[arg-type]
             bootstrap_n=n_boot,
             alpha=alpha,
             max_cond_size=max_cond_size,
@@ -512,6 +571,8 @@ def discover_relationships(
             f"Bootstrap stability enabled (n={n_boot}); "
             "confidence capped by per-edge stability (honest, exploratory)."
         )
+    elif stability and method_s not in BUILTIN_METHODS:
+        notes.append("Bootstrap stability skipped for external soft backends (cost).")
 
     candidates = propose_candidates(roles, edges, cols)
 
@@ -531,7 +592,7 @@ def discover_relationships(
                 "confidence": e["confidence"],
                 "stability": e.get("stability"),
                 "type": e.get("type", "association"),
-                "method": e.get("method", method),
+                "method": e.get("method", method_s),
             }
             for e in edges
         ],
@@ -543,7 +604,7 @@ def discover_relationships(
         graph=graph,
         roles=roles,
         candidates=candidates,
-        method=method,
+        method=method_s,
         notes=notes,
         stability_enabled=stability,
         bootstrap_n=int(bootstrap_n) if stability else 0,
@@ -554,7 +615,7 @@ def discover_ensemble(
     df: pd.DataFrame,
     *,
     roles: dict[str, ColumnRole],
-    methods: Optional[Sequence[DiscoveryMethod]] = None,
+    methods: Optional[Sequence[DiscoveryMethod | str]] = None,
     alpha: float = 0.05,
     max_cond_size: int = 2,
     min_abs_corr: float = 0.15,
@@ -563,14 +624,32 @@ def discover_ensemble(
     bootstrap_n: int = 10,
     min_methods: int = 2,
     seed: int = 0,
+    include_optional: bool = True,
 ) -> "DiscoveryResult":
-    """Run multiple lightweight discovery methods and return a consensus graph."""
+    """Run multiple discovery methods and return a consensus graph.
+
+    When ``methods`` is omitted and ``include_optional`` is True, installed soft
+    backends (causal-learn PC/GES, lingam, gcastle) are appended automatically.
+    """
     from autocausal.results import DiscoveryResult
 
-    methods = list(methods or ("score_pc_lite", "corr_skeleton", "mi_stub"))
+    if methods is None:
+        methods_list: list[str] = ["score_pc_lite", "corr_skeleton", "mi_stub"]
+        if include_optional:
+            try:
+                from autocausal.engines import optional_ensemble_methods
+
+                for m in optional_ensemble_methods(installed_only=True):
+                    if m not in methods_list:
+                        methods_list.append(m)
+            except Exception:
+                pass
+        methods = methods_list
+    else:
+        methods = list(methods)
     mat, cols = numeric_matrix(df, roles)
     notes: list[str] = [
-        f"Multi-method ensemble discovery: {methods}. Consensus ≠ identification.",
+        f"Multi-method ensemble discovery: {list(methods)}. Consensus ≠ identification.",
     ]
     if len(cols) < 2:
         return DiscoveryResult(
@@ -586,20 +665,25 @@ def discover_ensemble(
     clean = mat.dropna()
     method_edges: dict[str, list[dict[str, Any]]] = {}
     for i, m in enumerate(methods):
-        edges_m = _run_method(
-            m,  # type: ignore[arg-type]
-            clean,
-            cols,
-            alpha=alpha,
-            max_cond_size=max_cond_size,
-            min_abs_corr=min_abs_corr,
-        )
-        if stability:
+        m_s = str(m)
+        if m_s in EXTERNAL_METHODS:
+            edges_m, ext_notes = _run_external_method(m_s, clean, cols, alpha=alpha)
+            notes.extend(ext_notes)
+        else:
+            edges_m = _run_method(
+                m_s,
+                clean,
+                cols,
+                alpha=alpha,
+                max_cond_size=max_cond_size,
+                min_abs_corr=min_abs_corr,
+            )
+        if stability and m_s in BUILTIN_METHODS:
             stab_map = _bootstrap_stability(
                 clean,
                 cols,
                 edges_m,
-                method=m,  # type: ignore[arg-type]
+                method=m_s,  # type: ignore[arg-type]
                 bootstrap_n=max(1, int(bootstrap_n)),
                 alpha=alpha,
                 max_cond_size=max_cond_size,
@@ -607,7 +691,7 @@ def discover_ensemble(
                 seed=seed + i,
             )
             edges_m = _apply_stability(edges_m, stab_map)
-        method_edges[m] = edges_m
+        method_edges[m_s] = edges_m
 
     edges = consensus_edges(method_edges, min_methods=min_methods)
     # if consensus empty (strict), fall back to union of pc_lite

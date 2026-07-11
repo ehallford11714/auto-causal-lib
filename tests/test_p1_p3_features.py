@@ -35,8 +35,13 @@ def _toy_df(n: int = 80, seed: int = 0) -> pd.DataFrame:
 
 
 def test_version_0_8_or_newer():
-    # 0.8 P1–P3 APIs remain; suites + skilling ship in 0.9.x
-    assert __version__.startswith("0.8") or __version__.startswith("0.9")
+    # 0.8 P1–P3 APIs remain; suites + skilling ship in 0.9.x; backends in 0.11
+    assert (
+        __version__.startswith("0.8")
+        or __version__.startswith("0.9")
+        or __version__.startswith("0.10")
+        or __version__.startswith("0.11")
+    )
 
 
 def test_fabric_contracts_mine_edges_bundle():
@@ -183,7 +188,8 @@ def test_refute_placebo_and_soft_dowhy():
     assert "placebo_corr" in r.data
     soft = refute(edge, method="dowhy", df=df)
     assert soft.ok
-    assert soft.soft_skip is True
+    # Missing → soft_skip; installed → real DoWhy backend
+    assert soft.soft_skip is True or str(soft.backend).startswith("dowhy")
 
 
 def test_sql_chunksize_sample_n(tmp_path):

@@ -318,11 +318,15 @@ def _discover(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         "qc",
         "drop_id_columns",
         "seed",
+        "method",
+        "include_optional",
     ):
         if key in args and args[key] is not None:
             kwargs[key] = args[key]
     if args.get("focus_columns"):
         kwargs["focus_columns"] = list(args["focus_columns"])
+    if args.get("methods"):
+        kwargs["methods"] = list(args["methods"])
     try:
         result = ac.discover(**kwargs)
         payload = result.to_dict() if hasattr(result, "to_dict") else to_jsonable(result)
@@ -335,6 +339,68 @@ def _discover(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         )
     except Exception as e:
         return err_payload(f"discover failed: {e}", tool="autocausal_discover")
+
+
+def _list_engines(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    try:
+        from autocausal.engines import engine_status, list_engines
+
+        kind = args.get("kind")
+        if args.get("full") or not kind:
+            return ok_payload(tool="autocausal_list_engines", **engine_status())
+        engines = [e.to_dict() for e in list_engines(kind=str(kind))]
+        return ok_payload(tool="autocausal_list_engines", kind=kind, engines=engines, n=len(engines))
+    except Exception as e:
+        return err_payload(f"list_engines failed: {e}", tool="autocausal_list_engines")
+
+
+def _estimate(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    sid = _sid(args)
+    try:
+        if store.has(sid):
+            ac = store.get(sid)
+            df = ac.df
+            candidates = ac.result.candidates if ac.result is not None else None
+        elif args.get("path"):
+            from autocausal import AutoCausal
+
+            ac = AutoCausal.from_csv(str(args["path"]))
+            store.put(ac, sid)
+            df = ac.df
+            candidates = None
+        else:
+            return err_payload("session_id or path required", tool="autocausal_estimate")
+        from autocausal.engines import estimate as eng_estimate
+
+        result = eng_estimate(
+            df,
+            backend=str(args.get("backend") or "builtin_ols"),
+            y=args.get("y"),
+            d=args.get("d"),
+            x=list(args["x"]) if args.get("x") else None,
+            z=args.get("z"),
+            candidates=candidates,
+        )
+        return ok_payload(tool="autocausal_estimate", session_id=sid, **result.to_dict())
+    except Exception as e:
+        return err_payload(f"estimate failed: {e}", tool="autocausal_estimate")
+
+
+def _refute(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    sid = _sid(args)
+    try:
+        if store.has(sid):
+            ac = store.get(sid)
+            edge = args.get("edge")
+            if edge is None and ac.result is not None and ac.result.edges:
+                edge = ac.result.edges[0]
+            result = ac.refute(edge=edge, method=str(args.get("method") or "placebo"))
+        else:
+            return err_payload("session_id required (load data first)", tool="autocausal_refute")
+        payload = result.to_dict() if hasattr(result, "to_dict") else to_jsonable(result)
+        return ok_payload(tool="autocausal_refute", session_id=sid, refute=payload)
+    except Exception as e:
+        return err_payload(f"refute failed: {e}", tool="autocausal_refute")
 
 
 def _insight_loop(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
@@ -745,11 +811,76 @@ def build_default_registry() -> ToolRegistry:
                     "use_iv": {"type": "boolean", "default": True},
                     "stability": {"type": "boolean", "default": False},
                     "ensemble": {"type": "boolean", "default": False},
+                    "method": {
+                        "type": "string",
+                        "description": "Single method e.g. score_pc_lite, causal_learn_pc, lingam",
+                    },
+                    "methods": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Ensemble methods including soft causal-learn/lingam/gcastle",
+                    },
                     "qc": {"type": "string", "enum": ["off", "warn", "block"], "default": "warn"},
                     "focus_columns": {"type": "array", "items": {"type": "string"}},
                 }
             ),
             handler=_discover,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_list_engines",
+            description="List discovery/estimate/refute/package engines and connectivity map.",
+            parameters=_props(
+                {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["discovery", "estimate", "refute", "package"],
+                    },
+                    "full": {"type": "boolean", "default": True},
+                }
+            ),
+            handler=_list_engines,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_estimate",
+            description="Estimate ATE/CATE via builtin_ols / doubleml / econml (soft-optional).",
+            parameters=_props(
+                {
+                    "session_id": {"type": "string"},
+                    "path": {"type": "string"},
+                    "backend": {
+                        "type": "string",
+                        "default": "builtin_ols",
+                        "description": "builtin_ols | doubleml | econml | econml_causal_forest | builtin_2sls",
+                    },
+                    "y": {"type": "string"},
+                    "d": {"type": "string"},
+                    "x": {"type": "array", "items": {"type": "string"}},
+                    "z": {"type": "string"},
+                }
+            ),
+            handler=_estimate,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_refute",
+            description="Refute an edge via placebo builtin or DoWhy refute_estimate (soft).",
+            parameters=_props(
+                {
+                    "session_id": {"type": "string"},
+                    "method": {
+                        "type": "string",
+                        "default": "placebo",
+                        "description": "placebo | random_common_cause | dowhy | dowhy_data_subset | …",
+                    },
+                    "edge": {"type": "object"},
+                }
+            ),
+            handler=_refute,
         )
     )
     registry.register(

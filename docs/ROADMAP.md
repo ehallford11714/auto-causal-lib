@@ -1,5 +1,16 @@
 # AutoCausalLib roadmap
 
+## Shipped in 0.11.0 — causal backends + engine connectivity
+
+- [x] Soft `causal-learn` PC / GES / FCI discovery adapters
+- [x] Real DoWhy `CausalModel.refute_estimate` (placebo / random common cause / data subset)
+- [x] DoubleML PLR ATE + EconML LinearDML / CausalForestDML estimate
+- [x] LiNGAM DirectLiNGAM + gCastle NOTEARS discovery (soft)
+- [x] Unified `autocausal.engines` + CLI `engines` / `estimate` / `refute`
+- [x] MCP tools: `autocausal_list_engines`, `autocausal_estimate`, `autocausal_refute`
+- [x] Insight / MCP / skilling / CLI first-class in wheel; `[causal-extra]` expanded
+- [x] Docs: [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md)
+
 ## Shipped in 0.8.0 (P1 → P3)
 
 ### Priority 1 — library credibility
@@ -19,14 +30,14 @@
 
 ### Priority 3 — research / scale
 - [x] Public/example loaders: local cache + soft network (`use_cache`)
-- [x] Refute hooks (`suite_tools.refute` / `ac.refute`) — DoWhy/EconML soft-skip
+- [x] Refute hooks (`suite_tools.refute` / `ac.refute`) — DoWhy real path + builtin placebo
 - [x] Chunked/sampled SQL (`chunksize`, `sample_n`)
 - [x] CausalSearch DAG export (`to_search_dag`, soft-optional)
 - [x] `py.typed` marker
 - [x] Imputation mechanism diagnostics on `ImputationReport`
 
 ## Deferred / out of scope
-- Full DoWhy `CausalModel.refute_estimate` wiring (soft stub only — keep deps optional)
+- CausalNex, CDT, stale scikit-uplift (skipped by design)
 - Formal Little's MCAR test / MNAR models
 - Hard dependency on CausalIV / CausalSearch / CausalBridge (remain soft)
 - Production AutoML OS / guaranteed identification

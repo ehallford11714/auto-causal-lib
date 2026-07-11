@@ -73,14 +73,19 @@ ac.join_frames(df_b, keys="id")
 spec = ac.to_causaliv_request()   # CausalIVRequest.v1 soft dict
 ```
 
-## Sensitivity & refute
+## Sensitivity & refute & estimate (0.11)
 
 ```python
 sens = ac.sensitivity(text="physics rollout")
 ref = ac.refute(method="placebo")              # builtin
-ref2 = ac.refute(method="dowhy")               # soft-skip if missing
-from autocausal.suite_tools import refute
+ref2 = ac.refute(method="dowhy")               # real DoWhy when installed; else soft-skip
+est = ac.estimate(backend="doubleml")          # soft DoubleML PLR
+est2 = ac.estimate(backend="econml")           # soft EconML CATE
+from autocausal.engines import list_engines, engine_status
+engine_status()
 ```
+
+See [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).
 
 ## SQL chunked / sampled
 
@@ -111,4 +116,5 @@ plus `mechanism_notes` / `diagnostics` (heuristic — not Little's MCAR).
 
 ## Version
 
-See `autocausal.__version__` (0.9.0+). Roadmap: [ROADMAP.md](ROADMAP.md).
+See `autocausal.__version__` (0.11.0+). Roadmap: [ROADMAP.md](ROADMAP.md).
+Backends: [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).

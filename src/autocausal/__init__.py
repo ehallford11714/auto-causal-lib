@@ -39,6 +39,9 @@ __all__ = [
     "align",
     "PanelSpec",
     "refute",
+    "estimate",
+    "list_engines",
+    "engine_status",
     "AutoCleanseSuite",
     "AutoEDASuite",
     "AutoMineSuite",
@@ -72,6 +75,10 @@ def __getattr__(name: str):
         from autocausal import suite_tools as _st
 
         return getattr(_st, name)
+    if name in ("estimate", "list_engines", "engine_status", "discover_with", "connectivity_map"):
+        from autocausal import engines as _eng
+
+        return getattr(_eng, name)
     if name in ("list_guides", "direct"):
         from autocausal import guides as _guides
 

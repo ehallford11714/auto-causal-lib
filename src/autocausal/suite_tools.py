@@ -194,25 +194,154 @@ def _adapter_causaliv(df: pd.DataFrame, **kwargs: Any) -> ToolResult:
         return ToolResult(tool_id="causaliv", ok=False, backend="causaliv", error=f"{type(e).__name__}: {e}")
 
 
-def _stub_optional(tool_id: str, module: str, install: str) -> Callable[..., ToolResult]:
-    def _fn(*_a: Any, **_k: Any) -> ToolResult:
-        if _probe(module):
-            return ToolResult(
-                tool_id=tool_id,
-                ok=True,
-                backend=module,
-                data={"available": True, "invoked": False},
-                notes=[f"{module} installed — wire domain-specific call in caller; stub invoke only."],
-            )
+def _adapter_dowhy(df: Optional[pd.DataFrame] = None, **kwargs: Any) -> ToolResult:
+    """Real DoWhy estimate/refute when installed; soft-skip otherwise."""
+    if not _probe("dowhy"):
         return ToolResult(
-            tool_id=tool_id,
+            tool_id="dowhy",
             ok=False,
-            backend="stub",
-            error=f"{module} not installed",
-            notes=[install],
+            backend="missing",
+            error="dowhy not installed",
+            notes=["pip install 'auto-causal-lib[causal-extra]'"],
         )
+    if df is None:
+        return ToolResult(
+            tool_id="dowhy",
+            ok=True,
+            backend="dowhy",
+            data={"available": True},
+            notes=["DoWhy present — pass df + y/d (and optional method=refute) to run."],
+        )
+    action = str(kwargs.get("action") or kwargs.get("method") or "refute").lower()
+    if action in ("refute", "dowhy", "placebo", "random_common_cause", "data_subset"):
+        from autocausal.backends import dowhy_refute
 
-    return _fn
+        raw = dowhy_refute.refute(
+            df,
+            method=kwargs.get("refute_method") or kwargs.get("method") or "dowhy",
+            y=kwargs.get("y"),
+            d=kwargs.get("d"),
+            x=kwargs.get("x") or kwargs.get("controls"),
+            candidates=kwargs.get("candidates"),
+            edge=kwargs.get("edge"),
+        )
+        return ToolResult(
+            tool_id="dowhy",
+            ok=bool(raw.get("ok")),
+            backend=str(raw.get("backend") or "dowhy"),
+            data=dict(raw.get("data") or {}),
+            notes=list(raw.get("notes") or []),
+            error=raw.get("error"),
+        )
+    return ToolResult(
+        tool_id="dowhy",
+        ok=True,
+        backend="dowhy",
+        data={"available": True, "hint": "action=refute"},
+    )
+
+
+def _adapter_econml(df: Optional[pd.DataFrame] = None, **kwargs: Any) -> ToolResult:
+    if not _probe("econml"):
+        return ToolResult(
+            tool_id="econml",
+            ok=False,
+            backend="missing",
+            error="econml not installed",
+            notes=["pip install 'auto-causal-lib[causal-extra]'"],
+        )
+    if df is None:
+        return ToolResult(
+            tool_id="econml",
+            ok=True,
+            backend="econml",
+            data={"available": True},
+            notes=["EconML present — pass df + y/d for LinearDML/CausalForestDML."],
+        )
+    from autocausal.backends import econml_backend
+
+    raw = econml_backend.estimate(
+        df,
+        y=kwargs.get("y"),
+        d=kwargs.get("d"),
+        x=kwargs.get("x") or kwargs.get("controls"),
+        candidates=kwargs.get("candidates"),
+        method=str(kwargs.get("method") or "econml_linear_dml"),
+    )
+    return ToolResult(
+        tool_id="econml",
+        ok=bool(raw.get("ok")),
+        backend=str(raw.get("backend") or "econml"),
+        data={"estimate": raw.get("estimate"), **dict(raw.get("data") or {})},
+        notes=list(raw.get("notes") or []),
+        error=raw.get("error"),
+    )
+
+
+def _adapter_doubleml(df: Optional[pd.DataFrame] = None, **kwargs: Any) -> ToolResult:
+    if not _probe("doubleml"):
+        return ToolResult(
+            tool_id="doubleml",
+            ok=False,
+            backend="missing",
+            error="doubleml not installed",
+            notes=["pip install 'auto-causal-lib[causal-extra]'"],
+        )
+    if df is None:
+        return ToolResult(
+            tool_id="doubleml",
+            ok=True,
+            backend="doubleml",
+            data={"available": True},
+            notes=["DoubleML present — pass df + y/d for PLR ATE."],
+        )
+    from autocausal.backends import doubleml_backend
+
+    raw = doubleml_backend.estimate(
+        df,
+        y=kwargs.get("y"),
+        d=kwargs.get("d"),
+        x=kwargs.get("x") or kwargs.get("controls"),
+        candidates=kwargs.get("candidates"),
+    )
+    return ToolResult(
+        tool_id="doubleml",
+        ok=bool(raw.get("ok")),
+        backend=str(raw.get("backend") or "doubleml"),
+        data={"estimate": raw.get("estimate"), **dict(raw.get("data") or {})},
+        notes=list(raw.get("notes") or []),
+        error=raw.get("error"),
+    )
+
+
+def _adapter_causal_learn(df: Optional[pd.DataFrame] = None, **kwargs: Any) -> ToolResult:
+    if not _probe("causallearn"):
+        return ToolResult(
+            tool_id="causal_learn",
+            ok=False,
+            backend="missing",
+            error="causal-learn not installed",
+            notes=["pip install 'auto-causal-lib[causal-extra]'"],
+        )
+    if df is None:
+        return ToolResult(
+            tool_id="causal_learn",
+            ok=True,
+            backend="causallearn",
+            data={"available": True},
+            notes=["causal-learn present — pass df + method=pc|ges|fci."],
+        )
+    from autocausal.backends import causal_learn
+
+    raw = causal_learn.discover(df, method=str(kwargs.get("method") or "causal_learn_pc"))
+    return ToolResult(
+        tool_id="causal_learn",
+        ok=bool(raw.get("ok")),
+        backend=str(raw.get("backend") or "causallearn"),
+        data={"edges": raw.get("edges"), **dict(raw.get("data") or {})},
+        notes=list(raw.get("notes") or []),
+        error=raw.get("error"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -544,11 +673,11 @@ _REGISTRY: dict[str, dict[str, Any]] = {
             id="dowhy",
             name="DoWhy",
             category="causal",
-            description="Microsoft DoWhy causal inference (optional)",
-            optional_extra="dowhy",
-            install_hint="pip install dowhy",
+            description="Microsoft DoWhy estimate + refute_estimate (optional)",
+            optional_extra="causal-extra",
+            install_hint="pip install 'auto-causal-lib[causal-extra]'",
         ),
-        "fn": _stub_optional("dowhy", "dowhy", "pip install dowhy"),
+        "fn": _adapter_dowhy,
         "probe": lambda: _probe("dowhy"),
     },
     "econml": {
@@ -556,23 +685,54 @@ _REGISTRY: dict[str, dict[str, Any]] = {
             id="econml",
             name="EconML",
             category="causal",
-            description="Microsoft EconML heterogeneous treatment effects (optional)",
-            optional_extra="econml",
-            install_hint="pip install econml",
+            description="Microsoft EconML LinearDML / CausalForestDML (optional)",
+            optional_extra="causal-extra",
+            install_hint="pip install 'auto-causal-lib[causal-extra]'",
         ),
-        "fn": _stub_optional("econml", "econml", "pip install econml"),
+        "fn": _adapter_econml,
         "probe": lambda: _probe("econml"),
+    },
+    "doubleml": {
+        "spec": ToolSpec(
+            id="doubleml",
+            name="DoubleML",
+            category="causal",
+            description="DoubleML partially linear regression ATE (optional)",
+            optional_extra="causal-extra",
+            install_hint="pip install 'auto-causal-lib[causal-extra]'",
+        ),
+        "fn": _adapter_doubleml,
+        "probe": lambda: _probe("doubleml"),
+    },
+    "causal_learn": {
+        "spec": ToolSpec(
+            id="causal_learn",
+            name="causal-learn",
+            category="causal",
+            description="causal-learn PC / GES / FCI discovery (optional)",
+            optional_extra="causal-extra",
+            install_hint="pip install 'auto-causal-lib[causal-extra]'",
+        ),
+        "fn": _adapter_causal_learn,
+        "probe": lambda: _probe("causallearn"),
     },
     "causalml": {
         "spec": ToolSpec(
             id="causalml",
             name="CausalML",
             category="causal",
-            description="Uber CausalML uplift / meta-learners (optional)",
+            description="Uber CausalML uplift / meta-learners (optional soft stub)",
             optional_extra="causalml",
             install_hint="pip install causalml",
         ),
-        "fn": _stub_optional("causalml", "causalml", "pip install causalml"),
+        "fn": lambda *a, **k: ToolResult(
+            tool_id="causalml",
+            ok=_probe("causalml"),
+            backend="causalml" if _probe("causalml") else "missing",
+            data={"available": _probe("causalml")},
+            notes=["Soft stub — prefer DoubleML/EconML adapters in autocausal.engines"],
+            error=None if _probe("causalml") else "causalml not installed",
+        ),
         "probe": lambda: _probe("causalml"),
     },
     "nltk": {
@@ -682,7 +842,17 @@ def _refresh_status(spec: ToolSpec, probe: Callable[[], bool]) -> ToolSpec:
             # NLP tools with builtin fallbacks still "available" via fallback
             if spec.id in ("nltk", "gensim"):
                 spec.status = "stub"
-            elif spec.id in ("dowhy", "econml", "causalml", "spacy", "datamine", "vision_kpi", "causaliv"):
+            elif spec.id in (
+                "dowhy",
+                "econml",
+                "doubleml",
+                "causal_learn",
+                "causalml",
+                "spacy",
+                "datamine",
+                "vision_kpi",
+                "causaliv",
+            ):
                 spec.status = "missing"
     return spec
 
@@ -899,6 +1069,8 @@ def refute(
     df: Optional[pd.DataFrame] = None,
     y: Optional[str] = None,
     d: Optional[str] = None,
+    x: Optional[list[str]] = None,
+    candidates: Optional[dict[str, list[str]]] = None,
     **kwargs: Any,
 ) -> RefuteResult:
     """Attempt a soft refutation of a discovered edge.
@@ -909,10 +1081,10 @@ def refute(
         Shuffle the putative treatment and re-check association (builtin).
     random_common_cause :
         Add noise covariate stub (builtin).
-    dowhy :
-        Soft-call DoWhy refute if installed; else soft-skip.
+    dowhy / dowhy_placebo / dowhy_random_common_cause / dowhy_data_subset :
+        Real DoWhy ``CausalModel.refute_estimate`` when installed; else soft-skip.
     econml :
-        Soft-call EconML sensitivity stub if installed; else soft-skip.
+        Soft-skip sensitivity note (prefer estimate backends for CATE).
 
     Always returns a :class:`RefuteResult` — missing heavy deps soft-skip.
     """
@@ -924,27 +1096,61 @@ def refute(
     ]
     method_l = (method or "placebo").lower().strip()
 
-    if method_l in ("dowhy", "dowhy_refute"):
-        mod = _soft_import("dowhy")
-        if mod is None:
-            return RefuteResult(
-                ok=True,
-                method=method_l,
-                backend="missing",
+    if method_l in (
+        "dowhy",
+        "dowhy_refute",
+        "dowhy_placebo",
+        "dowhy_random_common_cause",
+        "dowhy_data_subset",
+        "placebo_treatment_refuter",
+        "data_subset_refuter",
+    ) or (
+        method_l == "random_common_cause" and kwargs.get("backend") == "dowhy"
+    ):
+        # Prefer real DoWhy when installed and df present; else soft-skip
+        if method_l == "random_common_cause" and kwargs.get("backend") != "dowhy":
+            pass  # fall through to builtin
+        else:
+            from autocausal.backends import dowhy_refute
+
+            if df is None:
+                return RefuteResult(
+                    ok=True,
+                    method=method_l,
+                    backend="missing" if not _probe("dowhy") else "dowhy",
+                    edge=edge,
+                    soft_skip=True,
+                    notes=notes + ["df required for DoWhy refute — soft-skip."],
+                )
+            # Map plain random_common_cause+backend to dowhy variant
+            dowhy_method = method_l
+            if method_l == "random_common_cause":
+                dowhy_method = "dowhy_random_common_cause"
+            raw = dowhy_refute.refute(
+                df,
+                method=dowhy_method,
+                y=y or tgt or None,
+                d=d or src or None,
+                x=x or kwargs.get("controls"),
+                candidates=candidates,
                 edge=edge,
-                soft_skip=True,
-                notes=notes
-                + ["DoWhy not installed — soft-skip. pip install 'autocausal[causal-extra]'"],
+                **{k: v for k, v in kwargs.items() if k not in ("controls", "backend")},
             )
-        return RefuteResult(
-            ok=True,
-            method=method_l,
-            backend="dowhy",
-            edge=edge,
-            data={"status": "stub", "hint": "Wire CausalModel.refute_estimate in apps"},
-            notes=notes + ["DoWhy present; full refute wiring left to caller (soft stub)."],
-            soft_skip=True,
-        )
+            return RefuteResult(
+                ok=bool(raw.get("ok")),
+                method=str(raw.get("method") or method_l),
+                backend=str(raw.get("backend") or "dowhy"),
+                edge=dict(raw.get("edge") or edge),
+                data=dict(raw.get("data") or {}),
+                notes=list(raw.get("notes") or notes),
+                error=raw.get("error"),
+                soft_skip=bool(raw.get("soft_skip")),
+            )
+
+    # Explicit DoWhy random_common_cause when method name is the dowhy variant only — handled above.
+    # Also allow method="random_common_cause" with prefer_dowhy
+    if method_l in ("dowhy_random_common_cause",) and False:
+        pass
 
     if method_l in ("econml", "econml_sensitivity"):
         mod = _soft_import("econml")
@@ -956,15 +1162,15 @@ def refute(
                 edge=edge,
                 soft_skip=True,
                 notes=notes
-                + ["EconML not installed — soft-skip. pip install 'autocausal[causal-extra]'"],
+                + ["EconML not installed — soft-skip. pip install 'auto-causal-lib[causal-extra]'"],
             )
         return RefuteResult(
             ok=True,
             method=method_l,
             backend="econml",
             edge=edge,
-            data={"status": "stub", "hint": "Use EconML sensitivity analyzers in apps"},
-            notes=notes + ["EconML present; sensitivity left to caller (soft stub)."],
+            data={"status": "note", "hint": "Use estimate(backend='econml') for CATE; no dedicated refuter"},
+            notes=notes + ["EconML present; prefer engines.estimate for CATE (soft note)."],
             soft_skip=True,
         )
 

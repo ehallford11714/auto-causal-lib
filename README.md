@@ -32,6 +32,8 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Discovery stability & ensemble** - bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
 - **QC gate** - `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
 - **Panel / join / IV handoff** - `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks
+- **Causal backends (0.11)** - soft `causal-learn` / LiNGAM / gCastle discovery; DoubleML + EconML estimate; real DoWhy refute ([docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md))
+- **Engines surface** - `autocausal.engines` list/status + CLI `engines` / `estimate` / `refute`; MCP `autocausal_list_engines` / `_estimate` / `_refute`
 - Markdown / JSON reports and a CLI
 
 ## Install
@@ -51,8 +53,17 @@ pip install "auto-causal-lib[slm]"           # torch + transformers (lazy load)
 pip install "auto-causal-lib[mcp]"           # MCP stdio server for other agents
 pip install "auto-causal-lib[ui]"            # Streamlit physics demo (+ plotly)
 pip install "auto-causal-lib[ml]"            # torch + scikit-learn
-pip install "auto-causal-lib[causal-extra]"  # DoWhy / EconML
+pip install "auto-causal-lib[causal-extra]"  # causal-learn, DoWhy, DoubleML, EconML, lingam, gCastle
 pip install "auto-causal-lib[postgres]"      # and other DB drivers - see docs/CONNECTIONS.md
+```
+
+First-class modules in every wheel (no heavy deps required): `insight`, `mcp`/`connective`, `skilling`, `cli`, `backends`/`engines`, `agentic`, `grail`, `suites`.
+
+```bash
+python -m autocausal engines status
+python -m autocausal insight --help
+python -m autocausal skilling list
+python -m autocausal.mcp          # needs [mcp] for SDK; AgentHook works without it
 ```
 
 From source (development):

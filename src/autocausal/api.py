@@ -46,6 +46,7 @@ class AutoCausal:
         self.sensitivity_report: Any = None
         self.panel_spec: Any = None
         self.refute_results: list[Any] = []
+        self.estimate_results: list[Any] = []
         # First-class suite reports (AutoCleanse / AutoEDA / AutoMine)
         self.cleanse_report: Any = None
         self.eda_report: Any = None
@@ -320,10 +321,12 @@ class AutoCausal:
         bootstrap_n: int = 20,
         ensemble: bool = False,
         methods: Optional[list[str]] = None,
+        method: Optional[str] = None,
         min_methods: int = 2,
         qc: QCMode = "warn",
         drop_id_columns: bool = True,
         seed: int = 0,
+        include_optional: bool = True,
     ) -> DiscoveryResult:
         if qc != "off":
             self.validate_qc(mode=qc)
@@ -356,6 +359,7 @@ class AutoCausal:
                 bootstrap_n=bootstrap_n,
                 min_methods=min_methods,
                 seed=seed,
+                include_optional=include_optional if methods is None else False,
             )
         else:
             result = discover_relationships(
@@ -365,6 +369,7 @@ class AutoCausal:
                 max_cond_size=max_cond_size,
                 min_abs_corr=min_abs_corr,
                 use_iv=use_iv,
+                method=method or "score_pc_lite",  # type: ignore[arg-type]
                 stability=stability,
                 bootstrap_n=bootstrap_n,
                 seed=seed,
@@ -655,14 +660,58 @@ class AutoCausal:
         method: str = "placebo",
         **kwargs: Any,
     ) -> Any:
-        """Soft refute hook (DoWhy/EconML/suite_tools) — no-ops gracefully."""
+        """Soft refute hook (DoWhy real path / builtin placebo) — no-ops gracefully."""
         from autocausal.suite_tools import refute as suite_refute
 
         if edge is None and self.result is not None and self.result.edges:
             edge = self.result.edges[0]
-        result = suite_refute(edge or {}, method=method, df=self._df, **kwargs)
+        candidates = None
+        if self.result is not None:
+            candidates = self.result.candidates
+        result = suite_refute(
+            edge or {},
+            method=method,
+            df=self._df,
+            candidates=candidates,
+            **kwargs,
+        )
         self.refute_results.append(result)
         return result
+
+    def estimate(
+        self,
+        *,
+        backend: str = "builtin_ols",
+        y: Optional[str] = None,
+        d: Optional[str] = None,
+        x: Optional[Sequence[str]] = None,
+        z: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Estimate ATE/CATE via builtin / DoubleML / EconML (soft-optional)."""
+        from autocausal.engines import estimate as eng_estimate
+
+        candidates = self.result.candidates if self.result is not None else None
+        result = eng_estimate(
+            self._df,
+            backend=backend,
+            y=y,
+            d=d,
+            x=list(x) if x is not None else None,
+            z=z,
+            candidates=candidates,
+            **kwargs,
+        )
+        if not hasattr(self, "estimate_results") or self.estimate_results is None:
+            self.estimate_results = []
+        self.estimate_results.append(result)
+        return result
+
+    def engines_status(self) -> dict[str, Any]:
+        """Unified discovery/estimate/refute/package engine status."""
+        from autocausal.engines import engine_status
+
+        return engine_status()
 
     def to_fabric_bundle(self, *, insight: Any = None) -> dict[str, Any]:
         """Export MineReport + CausalEdges (+ optional InsightPack) Fabric bundle."""
