@@ -53,6 +53,8 @@ class AutoCausal:
         self.mine_report: Any = None
         self._suite_use_slm: Optional[bool] = None
         self.grail_report: Any = None
+        # Optional IV role overrides (set_iv_roles / discover candidates=)
+        self._iv_roles: dict[str, list[str]] = {}
 
 
     @classmethod
@@ -310,6 +312,93 @@ class AutoCausal:
         return self
 
 
+    def set_iv_roles(
+        self,
+        *,
+        treatment: Optional[Union[str, Sequence[str]]] = None,
+        outcome: Optional[Union[str, Sequence[str]]] = None,
+        instrument: Optional[Union[str, Sequence[str]]] = None,
+        confounder: Optional[Union[str, Sequence[str]]] = None,
+    ) -> "AutoCausal":
+        """Pin IV role candidates for subsequent ``discover`` / ``to_causaliv_request``.
+
+        Overrides name heuristics. Pass a string or list per role. Clears a role
+        when given an empty list.
+        """
+
+        def _as_list(v: Optional[Union[str, Sequence[str]]]) -> Optional[list[str]]:
+            if v is None:
+                return None
+            if isinstance(v, str):
+                return [v]
+            return [str(x) for x in v]
+
+        for key, val in (
+            ("treatment", treatment),
+            ("outcome", outcome),
+            ("instrument", instrument),
+            ("confounder", confounder),
+        ):
+            parsed = _as_list(val)
+            if parsed is not None:
+                self._iv_roles[key] = parsed
+        return self
+
+    def auto_add_instrument(
+        self,
+        *,
+        treatment: Optional[str] = None,
+        seed: int = 0,
+        force: bool = False,
+        col: Optional[str] = None,
+    ) -> "AutoCausal":
+        """Add a synthetic exploratory instrument column to the working frame.
+
+        Prefer real IV columns (``iv_demo``, ``instruments_demo``, ``set_iv_roles``)
+        when available. This helper is for demo plumbing when Z is missing.
+        """
+        from autocausal.iv import AUTO_INSTRUMENT_COL, synthesize_auto_instrument
+
+        treat = treatment
+        if treat is None:
+            roles = self._iv_roles or {}
+            treat = (roles.get("treatment") or [None])[0]
+        if treat is None and self.result is not None:
+            treat = (self.result.candidates.get("treatment") or [None])[0]
+        if treat is None:
+            # name heuristic fallback
+            for c in self._df.columns:
+                low = str(c).lower()
+                if any(h in low for h in ("treat", "treatment", "exposure", "dose")):
+                    treat = str(c)
+                    break
+        if treat is None:
+            # last resort: first numeric non-id column
+            from autocausal.roles import ColumnRole as CR
+
+            roles_map = infer_column_roles(self._df)
+            nums = [c for c, r in roles_map.items() if r == CR.NUMERIC]
+            treat = nums[0] if nums else None
+        if treat is None:
+            raise ValueError("auto_add_instrument requires a treatment column")
+
+        name = col or AUTO_INSTRUMENT_COL
+        self._df, notes = synthesize_auto_instrument(
+            self._df, treat, seed=seed, col=name, force=force
+        )
+        self.roles = infer_column_roles(self._df)
+        self._iv_roles.setdefault("instrument", [])
+        if name not in self._iv_roles["instrument"]:
+            self._iv_roles["instrument"] = [name] + list(self._iv_roles.get("instrument") or [])
+        if treatment or treat:
+            self._iv_roles.setdefault("treatment", [])
+            if treat not in self._iv_roles["treatment"]:
+                self._iv_roles["treatment"] = [treat] + list(self._iv_roles.get("treatment") or [])
+        # stash notes on a light attribute for discover to pick up
+        prev = getattr(self, "_auto_instrument_notes", None) or []
+        self._auto_instrument_notes = list(prev) + list(notes)
+        return self
+
     def discover(
         self,
         *,
@@ -317,6 +406,9 @@ class AutoCausal:
         max_cond_size: int = 2,
         min_abs_corr: float = 0.15,
         use_iv: bool = True,
+        auto_instrument: bool = True,
+        allow_iv_fallback: bool = False,
+        candidates: Optional[dict[str, Sequence[str]]] = None,
         focus_columns: Optional[list[str]] = None,
         stability: bool = False,
         bootstrap_n: int = 20,
@@ -329,6 +421,25 @@ class AutoCausal:
         seed: int = 0,
         include_optional: bool = True,
     ) -> DiscoveryResult:
+        """Discover exploratory edges; optionally run IV / auto-instrument.
+
+        Parameters
+        ----------
+        use_iv:
+            Attempt IV / 2SLS edges when treatment, outcome, and instrument
+            candidates exist.
+        auto_instrument:
+            When True (default) and instruments are missing but treatments and
+            outcomes exist, synthesize ``auto_instrument_z`` (exploratory only;
+            notes state it is not identification). Set False to skip instead.
+        allow_iv_fallback:
+            When True, propose weak numeric correlates as instrument *candidates*
+            if no name-heuristic Z is found (default False — prefer real columns).
+        candidates:
+            Optional role injection, e.g.
+            ``{"treatment":[...],"outcome":[...],"instrument":[...]}``.
+            Merged with ``set_iv_roles`` (explicit args win).
+        """
         if qc != "off":
             self.validate_qc(mode=qc)
 
@@ -347,33 +458,45 @@ class AutoCausal:
             if len(keep) >= 2:
                 work = work[keep]
         self.roles = infer_column_roles(work)
+
+        merged_candidates: dict[str, list[str]] = {}
+        if self._iv_roles:
+            merged_candidates = {k: list(v) for k, v in self._iv_roles.items() if v}
+        if candidates:
+            from autocausal.iv import merge_role_candidates
+
+            merged_candidates = merge_role_candidates(merged_candidates, candidates)
+
+        # Persist injected instruments onto the working frame when auto_instrument
+        # already ran via helper, or when discover will synthesize.
+        discover_kwargs: dict[str, Any] = {
+            "alpha": alpha,
+            "max_cond_size": max_cond_size,
+            "min_abs_corr": min_abs_corr,
+            "use_iv": use_iv,
+            "auto_instrument": auto_instrument,
+            "allow_iv_fallback": allow_iv_fallback,
+            "candidates": merged_candidates or None,
+            "stability": stability,
+            "bootstrap_n": bootstrap_n,
+            "seed": seed,
+        }
+
         if ensemble or methods:
             result = discover_ensemble(
                 work,
                 roles=self.roles,
                 methods=methods,  # type: ignore[arg-type]
-                alpha=alpha,
-                max_cond_size=max_cond_size,
-                min_abs_corr=min_abs_corr,
-                use_iv=use_iv,
-                stability=stability,
-                bootstrap_n=bootstrap_n,
                 min_methods=min_methods,
-                seed=seed,
                 include_optional=include_optional if methods is None else False,
+                **discover_kwargs,
             )
         else:
             result = discover_relationships(
                 work,
                 roles=self.roles,
-                alpha=alpha,
-                max_cond_size=max_cond_size,
-                min_abs_corr=min_abs_corr,
-                use_iv=use_iv,
                 method=method or "score_pc_lite",  # type: ignore[arg-type]
-                stability=stability,
-                bootstrap_n=bootstrap_n,
-                seed=seed,
+                **discover_kwargs,
             )
         result.imputation = self.imputation
         if self.mining is not None:
@@ -382,14 +505,29 @@ class AutoCausal:
             result.notes = list(result.notes) + [
                 f"QC ok={self.qc_report.ok} issues={len(self.qc_report.issues)}"
             ]
+        extra_notes = getattr(self, "_auto_instrument_notes", None) or []
+        if extra_notes:
+            result.notes = list(result.notes) + list(extra_notes)
         if self.sensitivity_report is not None:
             result.sensitivity_report = (
                 self.sensitivity_report.to_dict()
                 if hasattr(self.sensitivity_report, "to_dict")
                 else self.sensitivity_report
             )
+        # If auto_instrument added a column inside discovery, mirror onto session frame
+        auto_z = "auto_instrument_z"
+        bind_frame = work.copy()
+        if auto_z in (result.candidates.get("instrument") or []):
+            from autocausal.iv import synthesize_auto_instrument
+
+            treat = (result.candidates.get("treatment") or [None])[0]
+            if treat and treat in self._df.columns and auto_z not in self._df.columns:
+                self._df, _ = synthesize_auto_instrument(self._df, treat, seed=seed)
+                self.roles = infer_column_roles(self._df)
+            if treat and treat in bind_frame.columns and auto_z not in bind_frame.columns:
+                bind_frame, _ = synthesize_auto_instrument(bind_frame, treat, seed=seed)
         # Bind session + working frame so result.estimate / refute / fabric work standalone
-        result.bind_session(self, frame=work.copy(), source=self.source)
+        result.bind_session(self, frame=bind_frame, source=self.source)
         self.result = result
         return result
 
@@ -713,7 +851,11 @@ class AutoCausal:
         confounders: Optional[Sequence[str]] = None,
     ) -> dict[str, Any]:
         """Structured CausalIV handoff spec (soft if ``causaliv`` missing)."""
-        cands = self.result.candidates if self.result is not None else {}
+        cands = dict(self._iv_roles) if self._iv_roles else {}
+        if self.result is not None:
+            for k, v in (self.result.candidates or {}).items():
+                if k not in cands or not cands[k]:
+                    cands[k] = list(v or [])
         y = outcome or (cands.get("outcome") or [None])[0]
         d = treatment or (cands.get("treatment") or [None])[0]
         z = instrument or (cands.get("instrument") or [None])[0]

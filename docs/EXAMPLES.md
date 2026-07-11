@@ -19,6 +19,26 @@ for e in ac.result.edges[:10]:
     print(e)
 ```
 
+## IV / 2SLS (real instrument column)
+
+Prefer a dataset that ships `z` (or join `instruments_demo`). Iris has no real IV —
+``auto_instrument=True`` (default) may synthesize exploratory ``auto_instrument_z``
+with heavy caveats in notes.
+
+```python
+from autocausal import AutoCausal, load_dataset
+
+df = load_dataset("iv_demo")  # columns: z, treatment, outcome, …
+ac = AutoCausal(df)
+result = ac.discover(use_iv=True, auto_instrument=False, qc="off", min_abs_corr=0.05)
+iv = [e for e in result.edges if e.get("type") == "iv_2sls"]
+print(iv[:3], result.notes[-3:])
+
+# Or inject roles explicitly:
+ac2 = AutoCausal(df).set_iv_roles(treatment="treatment", outcome="outcome", instrument="z")
+ac2.discover(use_iv=True, candidates={"instrument": ["z"]})
+```
+
 ```python
 from autocausal.insight import run_insight_loop, demo_insight
 

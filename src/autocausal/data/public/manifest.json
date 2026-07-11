@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "description": "AutoCausalLib public / demo dataset suite",
   "sources": [
     {
@@ -56,7 +56,7 @@
       "domain": "marketing",
       "access": "bundled",
       "license_note": "Synthetic MIT-licensed fixture.",
-      "description": "User-level campaign exposure, CTR, conversion, spend, revenue.",
+      "description": "User-level campaign exposure, CTR, conversion, spend, revenue, plus instrument_z/assignment for IV.",
       "path": "marketing_demo.csv",
       "url": null,
       "sql_url_env": null,
@@ -73,6 +73,14 @@
         {
           "column": "campaign",
           "dtype": "str"
+        },
+        {
+          "column": "instrument_z",
+          "dtype": "float"
+        },
+        {
+          "column": "assignment",
+          "dtype": "int"
         },
         {
           "column": "treatment",
@@ -108,7 +116,7 @@
       "domain": "policy",
       "access": "bundled",
       "license_note": "Synthetic MIT-licensed fixture.",
-      "description": "Unit-year panel with post \u00d7 treated_unit design and outcomes.",
+      "description": "Unit-year panel with post \u00d7 treated_unit, instrument_z/assignment, and outcomes.",
       "path": "policy_demo.csv",
       "url": null,
       "sql_url_env": null,
@@ -124,6 +132,14 @@
         },
         {
           "column": "year",
+          "dtype": "int"
+        },
+        {
+          "column": "instrument_z",
+          "dtype": "float"
+        },
+        {
+          "column": "assignment",
           "dtype": "int"
         },
         {
@@ -503,6 +519,39 @@
       ],
       "suggested_join_keys": [],
       "rows_approx": 250,
+      "offline": true
+    },
+    {
+      "id": "iv_demo",
+      "name": "Instrumental variables demo",
+      "domain": "causal_iv",
+      "access": "bundled",
+      "license_note": "Synthetic MIT-licensed fixture.",
+      "description": "Synthetic z \u2192 treatment \u2192 outcome design for offline IV / 2SLS demos.",
+      "path": "iv_demo.csv",
+      "url": null,
+      "sql_url_env": null,
+      "table": null,
+      "schema_summary": [
+        {
+          "column": "z",
+          "dtype": "float"
+        },
+        {
+          "column": "treatment",
+          "dtype": "int"
+        },
+        {
+          "column": "outcome",
+          "dtype": "float"
+        },
+        {
+          "column": "confounder",
+          "dtype": "float"
+        }
+      ],
+      "suggested_join_keys": [],
+      "rows_approx": 200,
       "offline": true
     },
     {

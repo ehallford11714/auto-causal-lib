@@ -196,6 +196,24 @@ _REGISTRY: dict[str, ExampleDataset] = {
             "median_house_value",
         ],
     ),
+    "iv_demo": ExampleDataset(
+        id="iv_demo",
+        name="Instrumental variables demo",
+        filename="iv_demo.csv",
+        domain="causal_iv",
+        description=(
+            "Synthetic IV design: instrument z → treatment → outcome "
+            "(plus a confounder). For offline IV / 2SLS demos."
+        ),
+        license_note="Synthetic MIT-licensed fixture (not real observational data).",
+        rows_approx=200,
+        suggested_outcome="outcome",
+        columns=["z", "treatment", "outcome", "confounder", "noise"],
+        epistemic_note=(
+            "Synthetic IV demo with a known instrument column `z`. "
+            "Edges illustrate library IV plumbing — not real-world identification."
+        ),
+    ),
 }
 
 # Public aliases used by older manifest / CLI docs
@@ -205,6 +223,8 @@ _ALIASES: dict[str, str] = {
     "gapminder": "gapminder_subset",
     "housing": "california_housing_sample",
     "california_housing": "california_housing_sample",
+    "iv": "iv_demo",
+    "instrumental": "iv_demo",
 }
 
 DATASET_IDS: tuple[str, ...] = tuple(_REGISTRY.keys())

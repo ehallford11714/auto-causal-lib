@@ -311,6 +311,8 @@ def _discover(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         "max_cond_size",
         "min_abs_corr",
         "use_iv",
+        "auto_instrument",
+        "allow_iv_fallback",
         "stability",
         "bootstrap_n",
         "ensemble",
@@ -327,6 +329,8 @@ def _discover(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         kwargs["focus_columns"] = list(args["focus_columns"])
     if args.get("methods"):
         kwargs["methods"] = list(args["methods"])
+    if args.get("candidates"):
+        kwargs["candidates"] = dict(args["candidates"])
     try:
         result = ac.discover(**kwargs)
         payload = result.to_dict() if hasattr(result, "to_dict") else to_jsonable(result)
@@ -809,6 +813,20 @@ def build_default_registry() -> ToolRegistry:
                     "alpha": {"type": "number", "default": 0.05},
                     "min_abs_corr": {"type": "number", "default": 0.15},
                     "use_iv": {"type": "boolean", "default": True},
+                    "auto_instrument": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "When instruments missing, synthesize exploratory auto_instrument_z",
+                    },
+                    "allow_iv_fallback": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Propose weak correlate instrument candidates (not identification)",
+                    },
+                    "candidates": {
+                        "type": "object",
+                        "description": "Optional role injection: treatment/outcome/instrument/confounder lists",
+                    },
                     "stability": {"type": "boolean", "default": False},
                     "ensemble": {"type": "boolean", "default": False},
                     "method": {

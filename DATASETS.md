@@ -23,9 +23,10 @@ Synthetic join fixtures (finance/marketing/…) remain under
 | `titanic` | 891 | `Survived` | Public-domain passenger records via open educational mirrors |
 | `gapminder_subset` | 36 | `lifeExp` | Gapminder open indicators subset — **cite Gapminder** |
 | `california_housing_sample` | 250 | `median_house_value` | sklearn California housing sample — educational |
+| `iv_demo` | 200 | `outcome` | Synthetic MIT fixture: `z` → `treatment` → `outcome` for IV demos |
 
 Aliases: `iris_open` → `iris`, `gapminder` / `gapminder_open` → `gapminder_subset`,
-`housing` → `california_housing_sample`.
+`housing` → `california_housing_sample`, `iv` / `instrumental` → `iv_demo`.
 
 ## Epistemic honesty
 
@@ -33,6 +34,12 @@ Exploratory edges on these tables are **library demos**, not scientific causal
 identification. Iris morphological associations do **not** claim that one flower
 trait causes another. Titanic / Gapminder / housing runs are similarly
 illustrative association discovery.
+
+**IV / instruments:** Iris has no real instrument — with ``auto_instrument=True``
+(default) discovery may synthesize ``auto_instrument_z`` for plumbing tests only;
+notes label it synthetic/exploratory. Prefer ``load_dataset("iv_demo")`` or public
+``instruments_demo`` / marketing/policy demos that ship real `z` / `assignment`
+columns when you want IV edges without auto-synthesis.
 
 ## Soft network refresh
 

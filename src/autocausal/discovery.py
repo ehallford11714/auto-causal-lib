@@ -16,13 +16,21 @@ from typing import Any, Literal, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from autocausal.iv import try_iv_edges
+from autocausal.iv import (
+    AUTO_INSTRUMENT_COL,
+    merge_role_candidates,
+    synthesize_auto_instrument,
+    try_iv_edges,
+)
 from autocausal.roles import ColumnRole, numeric_matrix
 
 __all__ = [
     "DiscoveryMethod",
     "BUILTIN_METHODS",
     "EXTERNAL_METHODS",
+    "NAME_IV_HINTS",
+    "NAME_OUT_HINTS",
+    "NAME_TREAT_HINTS",
     "discover_relationships",
     "discover_ensemble",
     "propose_candidates",
@@ -128,12 +136,68 @@ def _direction_score(mat: pd.DataFrame, a: str, b: str) -> tuple[str, str, float
     return b, a, r2_ba - r2_ab
 
 
+# Instrument name heuristics (substring match on lowercased column names).
+# Prefer real IV-named columns over inventing proxies (see allow_iv_fallback /
+# auto_instrument for explicit opt-in behaviors).
+NAME_IV_HINTS = (
+    "z",
+    "iv",
+    "instrument",
+    "instrument_z",
+    "assign",
+    "assignment",
+    "lottery",
+    "exog",
+    "rand",
+    "randomized",
+    "encourage",
+)
+NAME_OUT_HINTS = (
+    "y",
+    "outcome",
+    "target",
+    "revenue",
+    "sales",
+    "conversion",
+    "score",
+    "label",
+)
+NAME_TREAT_HINTS = (
+    "t",
+    "treat",
+    "treatment",
+    "x",
+    "dose",
+    "exposure",
+    "campaign",
+    "price",
+)
+
+
+def _name_hits(col: str, hints: Sequence[str]) -> bool:
+    low = col.lower()
+    return any(h in low for h in hints)
+
+
 def propose_candidates(
     roles: dict[str, ColumnRole],
     edges: list[dict[str, Any]],
     mat_cols: list[str],
-) -> dict[str, list[str]]:
-    """Heuristic treatment / outcome / instrument / confounder candidates."""
+    *,
+    allow_iv_fallback: bool = False,
+    mat: Optional[pd.DataFrame] = None,
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Heuristic treatment / outcome / instrument / confounder candidates.
+
+    Instruments are **name-gated** by default (``NAME_IV_HINTS``). When treatments
+    and outcomes exist but no instrument names match:
+
+    - default: leave ``instrument`` empty and emit a clear note (prefer real
+      columns / ``iv_demo`` / ``set_iv_roles`` / ``auto_instrument``).
+    - ``allow_iv_fallback=True``: propose weak numeric correlates of treatment
+      as instrument *candidates* only (still not identification).
+    """
+    notes: list[str] = []
     numeric = [c for c, r in roles.items() if r == ColumnRole.NUMERIC and c in mat_cols]
     binary = [
         c
@@ -145,13 +209,9 @@ def propose_candidates(
         deg[e["source"]] = deg.get(e["source"], 0) + 1
         deg[e["target"]] = deg.get(e["target"], 0) + 1
 
-    name_out = ("y", "outcome", "target", "revenue", "sales", "conversion", "score", "label")
-    name_treat = ("t", "treat", "treatment", "x", "dose", "exposure", "campaign", "price")
-    name_iv = ("z", "iv", "instrument", "assign", "lottery", "exog")
-
-    outcomes = [c for c in numeric if any(h in c.lower() for h in name_out)]
-    treatments = [c for c in (binary + numeric) if any(h in c.lower() for h in name_treat)]
-    instruments = [c for c in mat_cols if any(h in c.lower() for h in name_iv)]
+    outcomes = [c for c in numeric if _name_hits(c, NAME_OUT_HINTS)]
+    treatments = [c for c in (binary + numeric) if _name_hits(c, NAME_TREAT_HINTS)]
+    instruments = [c for c in mat_cols if _name_hits(c, NAME_IV_HINTS)]
 
     if not outcomes and numeric:
         outcomes = sorted(numeric, key=lambda c: deg.get(c, 0), reverse=True)[:2]
@@ -173,12 +233,95 @@ def propose_candidates(
     if not confounders:
         confounders = [c for c in numeric if c not in tset and c not in oset][:5]
 
-    return {
-        "treatment": treatments[:5],
-        "outcome": outcomes[:5],
-        "instrument": instruments[:5],
-        "confounder": confounders[:8],
-    }
+    if treatments and outcomes and not instruments:
+        notes.append(
+            "No instrument columns matched name heuristics "
+            f"{NAME_IV_HINTS[:6]}… — IV needs a Z column "
+            "(load `iv_demo`, join `instruments_demo`, pass candidates=/set_iv_roles, "
+            "or use auto_instrument=True)."
+        )
+        if allow_iv_fallback and mat is not None and treatments:
+            # Weak correlate fallback — never silent; never claim identification.
+            dcol = treatments[0]
+            if dcol in mat.columns:
+                d = pd.to_numeric(mat[dcol], errors="coerce")
+                scored: list[tuple[float, str]] = []
+                for c in numeric:
+                    if c in tset or c in oset or c in instruments:
+                        continue
+                    s = pd.to_numeric(mat[c], errors="coerce")
+                    pair = pd.concat([d, s], axis=1).dropna()
+                    if len(pair) < 20:
+                        continue
+                    r = float(pair.iloc[:, 0].corr(pair.iloc[:, 1]))
+                    if r == r and abs(r) >= 0.15:
+                        scored.append((abs(r), c))
+                scored.sort(reverse=True)
+                instruments = [c for _, c in scored[:2]]
+                if instruments:
+                    notes.append(
+                        "allow_iv_fallback=True: weak correlate(s) proposed as "
+                        f"instrument candidates {instruments} — exploratory only, "
+                        "not a real IV design."
+                    )
+
+    return (
+        {
+            "treatment": treatments[:5],
+            "outcome": outcomes[:5],
+            "instrument": instruments[:5],
+            "confounder": confounders[:8],
+        },
+        notes,
+    )
+
+
+def _apply_iv_pass(
+    clean: pd.DataFrame,
+    roles: dict[str, ColumnRole],
+    edges: list[dict[str, Any]],
+    cols: list[str],
+    *,
+    use_iv: bool,
+    auto_instrument: bool,
+    allow_iv_fallback: bool,
+    candidates_override: Optional[dict[str, Sequence[str]]],
+    seed: int,
+) -> tuple[pd.DataFrame, list[dict[str, Any]], dict[str, list[str]], list[str]]:
+    """Propose/merge candidates, optionally synthesize Z, run IV edges."""
+    notes: list[str] = []
+    proposed, prop_notes = propose_candidates(
+        roles, edges, cols, allow_iv_fallback=allow_iv_fallback, mat=clean
+    )
+    notes.extend(prop_notes)
+    candidates = merge_role_candidates(proposed, candidates_override)
+
+    work = clean
+    if (
+        use_iv
+        and auto_instrument
+        and (candidates.get("treatment") or [])
+        and (candidates.get("outcome") or [])
+        and not (candidates.get("instrument") or [])
+    ):
+        treat = candidates["treatment"][0]
+        work, auto_notes = synthesize_auto_instrument(
+            work, treat, seed=seed, col=AUTO_INSTRUMENT_COL
+        )
+        notes.extend(auto_notes)
+        if AUTO_INSTRUMENT_COL in work.columns:
+            candidates = merge_role_candidates(
+                candidates, {"instrument": [AUTO_INSTRUMENT_COL]}
+            )
+            if AUTO_INSTRUMENT_COL not in cols:
+                cols = list(cols) + [AUTO_INSTRUMENT_COL]
+
+    if use_iv:
+        iv_edges, iv_notes = try_iv_edges(work, candidates)
+        edges = list(edges) + iv_edges
+        notes.extend(iv_notes)
+
+    return work, edges, candidates, notes
 
 
 def _edge_key(src: str, tgt: str, *, undirected: bool = True) -> tuple[str, str]:
@@ -536,6 +679,9 @@ def discover_relationships(
     max_cond_size: int = 2,
     min_abs_corr: float = 0.15,
     use_iv: bool = True,
+    auto_instrument: bool = True,
+    allow_iv_fallback: bool = False,
+    candidates: Optional[dict[str, Sequence[str]]] = None,
     method: DiscoveryMethod | str = "score_pc_lite",
     stability: bool = False,
     bootstrap_n: int = 20,
@@ -604,12 +750,18 @@ def discover_relationships(
     elif stability and method_s not in BUILTIN_METHODS:
         notes.append("Bootstrap stability skipped for external soft backends (cost).")
 
-    candidates = propose_candidates(roles, edges, cols)
-
-    if use_iv:
-        iv_edges, iv_notes = try_iv_edges(clean, candidates)
-        edges.extend(iv_edges)
-        notes.extend(iv_notes)
+    clean, edges, cand, iv_notes = _apply_iv_pass(
+        clean,
+        roles,
+        edges,
+        cols,
+        use_iv=use_iv,
+        auto_instrument=auto_instrument,
+        allow_iv_fallback=allow_iv_fallback,
+        candidates_override=candidates,
+        seed=seed,
+    )
+    notes.extend(iv_notes)
 
     graph = {
         "directed": True,
@@ -626,14 +778,14 @@ def discover_relationships(
             }
             for e in edges
         ],
-        "candidates": candidates,
+        "candidates": cand,
     }
 
     return DiscoveryResult(
         edges=edges,
         graph=graph,
         roles=roles,
-        candidates=candidates,
+        candidates=cand,
         method=method_s,
         notes=notes,
         stability_enabled=stability,
@@ -650,6 +802,9 @@ def discover_ensemble(
     max_cond_size: int = 2,
     min_abs_corr: float = 0.15,
     use_iv: bool = True,
+    auto_instrument: bool = True,
+    allow_iv_fallback: bool = False,
+    candidates: Optional[dict[str, Sequence[str]]] = None,
     stability: bool = False,
     bootstrap_n: int = 10,
     min_methods: int = 2,
@@ -730,11 +885,18 @@ def discover_ensemble(
         edges = list(primary)
         notes.append("Consensus empty under min_methods; fell back to primary method edges.")
 
-    candidates = propose_candidates(roles, edges, cols)
-    if use_iv:
-        iv_edges, iv_notes = try_iv_edges(clean, candidates)
-        edges.extend(iv_edges)
-        notes.extend(iv_notes)
+    clean, edges, cand, iv_notes = _apply_iv_pass(
+        clean,
+        roles,
+        edges,
+        cols,
+        use_iv=use_iv,
+        auto_instrument=auto_instrument,
+        allow_iv_fallback=allow_iv_fallback,
+        candidates_override=candidates,
+        seed=seed,
+    )
+    notes.extend(iv_notes)
 
     if stability:
         notes.append(
@@ -757,7 +919,7 @@ def discover_ensemble(
             }
             for e in edges
         ],
-        "candidates": candidates,
+        "candidates": cand,
         "method_edges": {k: len(v) for k, v in method_edges.items()},
     }
 
@@ -765,7 +927,7 @@ def discover_ensemble(
         edges=edges,
         graph=graph,
         roles=roles,
-        candidates=candidates,
+        candidates=cand,
         method="consensus",
         notes=notes,
         stability_enabled=stability,

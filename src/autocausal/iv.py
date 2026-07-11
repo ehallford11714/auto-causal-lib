@@ -1,11 +1,104 @@
-"""Optional CausalIVSuite integration + numpy 2SLS lite."""
+"""Optional CausalIVSuite integration + numpy 2SLS lite + auto-instrument."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import pandas as pd
+
+__all__ = [
+    "AUTO_INSTRUMENT_COL",
+    "synthesize_auto_instrument",
+    "try_iv_edges",
+    "merge_role_candidates",
+]
+
+# Clearly labeled synthetic IV column (never pretend this is a real-world Z).
+AUTO_INSTRUMENT_COL = "auto_instrument_z"
+
+_AUTO_IV_NOTE = (
+    "Auto-added instrument `{col}` is SYNTHETIC / EXPLORATORY — "
+    "correlated with treatment for demo IV plumbing only. "
+    "It does NOT identify real-world causal effects; do not claim IV identification."
+)
+
+
+def synthesize_auto_instrument(
+    df: pd.DataFrame,
+    treatment: str,
+    *,
+    seed: int = 0,
+    col: str = AUTO_INSTRUMENT_COL,
+    force: bool = False,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Add an exploratory synthetic instrument correlated with ``treatment``.
+
+    Construction (assignment-style proxy):
+        Z = a * standardize(D) + noise
+
+    so the first stage is non-degenerate for demos / plumbing tests. The column
+    name and notes make clear this is **not** a real instrument.
+    """
+    notes: list[str] = []
+    out = df.copy()
+    if col in out.columns and not force:
+        notes.append(f"Instrument column `{col}` already present; left unchanged.")
+        return out, notes
+    if treatment not in out.columns:
+        notes.append(f"Cannot auto-add instrument: treatment `{treatment}` missing.")
+        return out, notes
+
+    rng = np.random.default_rng(seed)
+    d = pd.to_numeric(out[treatment], errors="coerce").to_numpy(dtype=float)
+    mask = np.isfinite(d)
+    z = np.full(len(out), np.nan, dtype=float)
+    if mask.sum() >= 3:
+        d_ok = d[mask]
+        d_std = d_ok - d_ok.mean()
+        scale = float(d_std.std()) or 1.0
+        d_std = d_std / scale
+        noise = rng.normal(0.0, 0.55, size=int(mask.sum()))
+        # Mild relevance to treatment; not exclusion-safe by construction.
+        z[mask] = 0.85 * d_std + noise
+    else:
+        z = rng.normal(size=len(out))
+
+    out[col] = z
+    notes.append(_AUTO_IV_NOTE.format(col=col))
+    notes.append(
+        f"Built `{col}` as noisy standardized `{treatment}` proxy "
+        f"(seed={seed}); exploratory demo IV only."
+    )
+    return out, notes
+
+
+def merge_role_candidates(
+    base: dict[str, list[str]],
+    override: Optional[dict[str, Sequence[str]]] = None,
+) -> dict[str, list[str]]:
+    """Merge user-injected role candidates; override values prepend and win order."""
+    roles = ("treatment", "outcome", "instrument", "confounder")
+    out: dict[str, list[str]] = {k: list(base.get(k) or []) for k in roles}
+    if not override:
+        return out
+    key_map = {
+        "treatments": "treatment",
+        "outcomes": "outcome",
+        "instruments": "instrument",
+        "confounders": "confounder",
+    }
+    for raw_key, values in override.items():
+        key = key_map.get(str(raw_key), str(raw_key))
+        if key not in out:
+            continue
+        merged: list[str] = []
+        for item in list(values or []) + list(out[key]):
+            s = str(item)
+            if s and s not in merged:
+                merged.append(s)
+        out[key] = merged
+    return out
 
 
 def _numpy_2sls(
@@ -94,10 +187,23 @@ def try_iv_edges(
     confounders = candidates.get("confounder") or []
 
     if not (treatments and outcomes and instruments):
-        notes.append("IV pass skipped: need treatment, outcome, and instrument candidates.")
+        missing = []
+        if not treatments:
+            missing.append("treatment")
+        if not outcomes:
+            missing.append("outcome")
+        if not instruments:
+            missing.append("instrument")
+        notes.append(
+            "IV pass skipped: need treatment, outcome, and instrument candidates "
+            f"(missing: {', '.join(missing)}). "
+            "Provide candidates=/set_iv_roles, join instruments_demo, load iv_demo, "
+            "or enable auto_instrument=True."
+        )
         return edges, notes
 
     used_suite = False
+    used_auto = False
     for z in instruments[:3]:
         for d in treatments[:2]:
             for y in outcomes[:2]:
@@ -105,7 +211,10 @@ def try_iv_edges(
                     continue
                 if any(c not in mat.columns for c in (z, d, y)):
                     continue
-                frame = mat[[z, d, y] + [c for c in confounders if c in mat.columns and c not in (z, d, y)]].dropna()
+                frame = mat[
+                    [z, d, y]
+                    + [c for c in confounders if c in mat.columns and c not in (z, d, y)]
+                ].dropna()
                 if len(frame) < 20:
                     continue
                 yv = frame[y].to_numpy(dtype=float)
@@ -123,9 +232,15 @@ def try_iv_edges(
                     res = _numpy_2sls(yv, dv, zv, controls)
                     method = "numpy_2sls_lite"
 
-                conf = float(min(1.0, abs(res["coef"]) / (1.0 + abs(res.get("se", 1.0))) * 0.5 + 0.1))
+                conf = float(
+                    min(1.0, abs(res["coef"]) / (1.0 + abs(res.get("se", 1.0))) * 0.5 + 0.1)
+                )
                 if res.get("first_stage_f", 0) < 5:
                     conf *= 0.5
+                is_auto = z == AUTO_INSTRUMENT_COL or str(z).startswith("auto_instrument")
+                if is_auto:
+                    used_auto = True
+                    conf *= 0.35  # down-weight synthetic IV confidence
                 edges.append(
                     {
                         "source": d,
@@ -137,9 +252,15 @@ def try_iv_edges(
                         "instrument": z,
                         "orientation": method,
                         "first_stage_f": round(float(res.get("first_stage_f", 0.0)), 3),
+                        "auto_instrument": is_auto,
                     }
                 )
 
+    if used_auto:
+        notes.append(
+            "IV edges used auto-generated exploratory instrument(s) — "
+            "NOT causal identification; treat as plumbing/demo only."
+        )
     if used_suite:
         notes.append("IV edges estimated via CausalIVSuite/causaliv.")
     elif edges:

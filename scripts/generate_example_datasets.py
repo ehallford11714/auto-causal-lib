@@ -162,6 +162,26 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         print("california housing failed:", type(e).__name__, e)
 
+    # --- IV demo (synthetic z → treatment → outcome) ---
+    rng = np.random.default_rng(11)
+    n = 200
+    z = rng.normal(size=n)
+    confounder = rng.normal(size=n)
+    noise = rng.normal(size=n)
+    treatment = ((0.9 * z + 0.35 * confounder + 0.25 * rng.normal(size=n)) > 0).astype(int)
+    outcome = 1.6 * treatment + 0.5 * confounder + 0.3 * noise
+    ivdf = pd.DataFrame(
+        {
+            "z": np.round(z, 6),
+            "treatment": treatment,
+            "outcome": np.round(outcome, 6),
+            "confounder": np.round(confounder, 6),
+            "noise": np.round(noise, 6),
+        }
+    )
+    ivdf.to_csv(PKG / "iv_demo.csv", index=False)
+    print("iv_demo", len(ivdf), list(ivdf.columns))
+
     for p in sorted(PKG.glob("*.csv")):
         shutil.copy2(p, EXAMPLES / p.name)
         print("mirrored", p.name)

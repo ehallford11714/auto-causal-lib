@@ -48,6 +48,7 @@ REAL_EXAMPLE_IDS = (
     "titanic",
     "gapminder_subset",
     "california_housing_sample",
+    "iv_demo",
 )
 
 # Aliases → canonical public / example ids
@@ -57,6 +58,8 @@ _PUBLIC_ALIASES = {
     "gapminder": "gapminder_subset",
     "housing": "california_housing_sample",
     "california_housing": "california_housing_sample",
+    "iv": "iv_demo",
+    "instrumental": "iv_demo",
 }
 
 
@@ -142,7 +145,7 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
                     if item.get("id") in BUNDLED_IDS:
                         ok = False
                         break
-            if ok and int(data.get("version", 0)) >= 3:
+            if ok and int(data.get("version", 0)) >= 4:
                 return PUBLIC_DIR
         except Exception:
             pass
@@ -166,14 +169,17 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
     )
     _write_csv(PUBLIC_DIR / "finance_demo.csv", finance)
 
-    # 2) marketing_demo — campaign panel
+    # 2) marketing_demo — campaign panel with IV-friendly assignment
     n = 100
+    z_m = rng.normal(size=n)
     marketing = pd.DataFrame(
         {
             "user_id": [f"u{i%40}" for i in range(n)],
             "region": rng.choice(["US", "EU", "APAC"], size=n),
             "campaign": rng.choice(["spring", "summer", "retarget"], size=n),
-            "treatment": rng.integers(0, 2, size=n),
+            "instrument_z": z_m,
+            "assignment": (z_m > 0).astype(int),
+            "treatment": ((0.85 * z_m + 0.35 * rng.normal(size=n)) > 0).astype(int),
             "ctr": np.clip(rng.normal(0.04, 0.02, size=n), 0, 1),
             "conversion": rng.integers(0, 2, size=n),
             "spend": rng.lognormal(3, 0.5, size=n),
@@ -189,8 +195,9 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
     )
     _write_csv(PUBLIC_DIR / "marketing_demo.csv", marketing)
 
-    # 3) policy_demo — DiD-style panel
+    # 3) policy_demo — DiD-style panel with encouragement / IV columns
     n = 96
+    z_p = rng.normal(size=n)
     policy = pd.DataFrame(
         {
             "unit_id": [f"s{i%16}" for i in range(n)],
@@ -199,12 +206,20 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             "post": (np.tile(np.arange(2018, 2024), 16)[:n] >= 2021).astype(int),
             "treated_unit": ([1] * 48 + [0] * 48)[:n],
             "eligibility": rng.integers(0, 2, size=n),
+            "instrument_z": z_p,
+            "assignment": (z_p > 0).astype(int),
             "outcome": rng.normal(10, 2, size=n),
             "population": rng.integers(50_000, 500_000, size=n),
         }
     )
     policy["treatment"] = (policy["treated_unit"] * policy["post"]).astype(int)
-    policy["outcome"] = policy["outcome"] + 1.5 * policy["treatment"] + 0.00001 * policy["population"]
+    # mild encouragement: assignment nudges uptake
+    policy["treatment"] = (
+        (policy["treatment"] + 0.4 * policy["assignment"] + 0.2 * rng.normal(size=n)) > 0.5
+    ).astype(int)
+    policy["outcome"] = (
+        policy["outcome"] + 1.5 * policy["treatment"] + 0.00001 * policy["population"]
+    )
     _write_csv(PUBLIC_DIR / "policy_demo.csv", policy)
 
     # 4) demographics_demo — region-level stub
@@ -300,12 +315,14 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             domain="marketing",
             access="bundled",
             license_note="Synthetic MIT-licensed fixture.",
-            description="User-level campaign exposure, CTR, conversion, spend, revenue.",
+            description="User-level campaign exposure, CTR, conversion, spend, revenue, plus instrument_z/assignment for IV.",
             path="marketing_demo.csv",
             schema_summary=[
                 {"column": "user_id", "dtype": "str"},
                 {"column": "region", "dtype": "str"},
                 {"column": "campaign", "dtype": "str"},
+                {"column": "instrument_z", "dtype": "float"},
+                {"column": "assignment", "dtype": "int"},
                 {"column": "treatment", "dtype": "int"},
                 {"column": "ctr", "dtype": "float"},
                 {"column": "conversion", "dtype": "int"},
@@ -322,12 +339,14 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             domain="policy",
             access="bundled",
             license_note="Synthetic MIT-licensed fixture.",
-            description="Unit-year panel with post × treated_unit design and outcomes.",
+            description="Unit-year panel with post × treated_unit, instrument_z/assignment, and outcomes.",
             path="policy_demo.csv",
             schema_summary=[
                 {"column": "unit_id", "dtype": "str"},
                 {"column": "region", "dtype": "str"},
                 {"column": "year", "dtype": "int"},
+                {"column": "instrument_z", "dtype": "float"},
+                {"column": "assignment", "dtype": "int"},
                 {"column": "treatment", "dtype": "int"},
                 {"column": "outcome", "dtype": "float"},
             ],
@@ -539,6 +558,24 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
             offline=True,
         ),
         PublicSource(
+            id="iv_demo",
+            name="Instrumental variables demo",
+            domain="causal_iv",
+            access="bundled",
+            license_note="Synthetic MIT-licensed fixture.",
+            description="Synthetic z → treatment → outcome design for offline IV / 2SLS demos.",
+            path="iv_demo.csv",
+            schema_summary=[
+                {"column": "z", "dtype": "float"},
+                {"column": "treatment", "dtype": "int"},
+                {"column": "outcome", "dtype": "float"},
+                {"column": "confounder", "dtype": "float"},
+            ],
+            suggested_join_keys=[],
+            rows_approx=200,
+            offline=True,
+        ),
+        PublicSource(
             id="iris_open",
             name="Iris (open CSV mirror)",
             domain="demo",
@@ -596,7 +633,7 @@ def ensure_bundled_public_data(*, force: bool = False) -> Path:
     ]
 
     payload = {
-        "version": 3,
+        "version": 4,
         "description": "AutoCausalLib public / demo dataset suite",
         "sources": [s.to_dict() for s in sources],
     }

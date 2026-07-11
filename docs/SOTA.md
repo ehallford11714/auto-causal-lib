@@ -11,7 +11,7 @@
 | **NOTEARS / GOLEM / DAG-GNN** | Continuous optimization with acyclicity constraints | Weighted adjacency | Often assumes linear SEM; hyperparameter-sensitive |
 | **LiNGAM** | Non-Gaussian ICA-style identification | Directed edges | Needs non-Gaussian noise assumptions |
 
-**What we implement:** a lightweight **PC-style stub** (pairwise + small conditioning sets via partial correlation / Fisher-z) plus **score-based orientation** (compare simple regression \(R^2\)). Optional **IV / 2SLS** edges when treatment, outcome, and instrument candidates exist (CausalIVSuite if importable, else NumPy 2SLS lite).
+**What we implement:** a lightweight **PC-style stub** (pairwise + small conditioning sets via partial correlation / Fisher-z) plus **score-based orientation** (compare simple regression \(R^2\)). Optional **IV / 2SLS** edges when treatment, outcome, and instrument candidates exist (CausalIVSuite if importable, else NumPy 2SLS lite). Instrument columns are name-heuristic by default; ``auto_instrument=True`` (default) may synthesize an exploratory ``auto_instrument_z`` when Z is missing — notes label it synthetic, never identification. Prefer ``iv_demo`` / ``instruments_demo`` for real demo Z columns.
 
 ## Imputation (landscape)
 
