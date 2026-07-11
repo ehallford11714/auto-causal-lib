@@ -73,7 +73,7 @@ def _ctx() -> dict[str, Any]:
 def test_list_guides_offline():
     rows = list_guides()
     ids = {r["id"] for r in rows}
-    assert {"rule", "huggingface", "llmintent", "retracement", "kineteq_pivot"} <= ids
+    assert {"rule", "huggingface", "llmintent", "retracement", "kineteq_pivot", "kineteq_grail"} <= ids
     rule = next(r for r in rows if r["id"] == "rule")
     assert rule["available"] is True
 

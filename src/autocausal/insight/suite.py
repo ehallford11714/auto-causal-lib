@@ -488,6 +488,7 @@ def run_insight_loop(
         stages.append("discover")
 
     guide_dict = None
+    grail_dict = None
     if not skip_guide:
         try:
             gres = ac.guide(
@@ -501,6 +502,24 @@ def run_insight_loop(
         except Exception as e:
             notes.append(f"guide soft-failed: {type(e).__name__}: {e}")
             stages.append("guide_skip")
+
+    # Soft GRAIL memory/graph step (always offline-safe)
+    try:
+        from autocausal.grail import insight_grail_step
+
+        grail_ctx = {
+            "columns": [{"name": str(c)} for c in list(ac.df.columns)],
+            "edges": _edges_from_ac(ac),
+            "text": text,
+            "candidates": _candidates_from_ac(ac),
+        }
+        grail_dict = insight_grail_step(text=text, context=grail_ctx, max_cycles=1)
+        stages.append("grail")
+        if grail_dict.get("notes"):
+            notes.extend(list(grail_dict["notes"])[:3])
+    except Exception as e:
+        notes.append(f"grail soft-failed: {type(e).__name__}: {e}")
+        stages.append("grail_skip")
 
     stages.append("insight_synthesize")
     edges = _edges_from_ac(ac)
@@ -535,6 +554,7 @@ def run_insight_loop(
         stages=stages,
         data_sources=data_sources,
         guide=guide_dict,
+        grail=grail_dict,
         mining=mining,
         discovery=disc,
         nlp_hints=nlp_hints_dict,
@@ -606,6 +626,7 @@ def run_slm_research_loop(
     prior_report: Optional[InsightReport] = None
     nlp_hints_dict: Optional[dict[str, Any]] = None
     guide_dict: Optional[dict[str, Any]] = None
+    last_grail: Optional[dict[str, Any]] = None
 
     recommender = (
         suite.recommender
@@ -633,6 +654,30 @@ def run_slm_research_loop(
             stages.append(f"round{r}:guide")
         except Exception as e:
             round_notes.append(f"guide soft-failed: {type(e).__name__}")
+
+        # GRAIL memory/graph step each research round
+        grail_round: Optional[dict[str, Any]] = None
+        try:
+            from autocausal.grail import insight_grail_step
+
+            grail_round = insight_grail_step(
+                text=text,
+                context={
+                    "columns": [{"name": str(c)} for c in list(ac.df.columns)],
+                    "edges": _edges_from_ac(ac),
+                    "text": text,
+                    "candidates": _candidates_from_ac(ac),
+                },
+                max_cycles=1,
+            )
+            last_grail = grail_round
+            stages.append(f"round{r}:grail")
+            round_notes.append(
+                f"grail backend={grail_round.get('backend')} "
+                f"focus={grail_round.get('focus_columns', [])[:4]}"
+            )
+        except Exception as e:
+            round_notes.append(f"grail soft-failed: {type(e).__name__}")
 
         edges = _edges_from_ac(ac)
         new_e, drop_e = edge_delta(prior_edges, edges)
@@ -712,6 +757,13 @@ def run_slm_research_loop(
             "stop": stop,
             "stop_reason": plan.stop_reason,
             "backend": plan.backend,
+            "grail": {
+                "backend": (grail_round or {}).get("backend"),
+                "focus_columns": (grail_round or {}).get("focus_columns"),
+                "memory_keys": (grail_round or {}).get("memory_keys"),
+            }
+            if grail_round
+            else None,
             "notes": round_notes + list(plan.notes[:3]),
         }
         round_history.append(hist)
@@ -759,6 +811,7 @@ def run_slm_research_loop(
         stages=stages,
         data_sources=data_sources,
         guide=guide_dict,
+        grail=last_grail,
         mining=mining,
         discovery=disc,
         nlp_hints=nlp_hints_dict,

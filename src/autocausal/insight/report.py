@@ -70,6 +70,7 @@ class InsightReport:
     experiments_recommended: list[dict[str, Any]] = field(default_factory=list)
     relationships_mined_further: list[dict[str, Any]] = field(default_factory=list)
     round_history: list[dict[str, Any]] = field(default_factory=list)
+    grail: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +81,7 @@ class InsightReport:
             "caveats": list(self.caveats),
             "guide_backend": self.guide_backend,
             "guide": self.guide,
+            "grail": self.grail,
             "slm_narrative": self.slm_narrative,
             "slm_used": self.slm_used,
             "slm_label": self.slm_label if self.slm_narrative else None,
@@ -108,6 +110,9 @@ class InsightReport:
         if self.n_rows or self.n_cols:
             lines.append(f"**Shape:** {self.n_rows} rows × {self.n_cols} cols")
         lines.append(f"**Guide backend:** `{self.guide_backend}`")
+        if self.grail:
+            gb = self.grail.get("backend") or "grail"
+            lines.append(f"**GRAIL:** `{gb}` (soft memory/graph step)")
         if self.stages:
             lines.append(f"**Stages:** {' → '.join(self.stages)}")
         if self.round_history:

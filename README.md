@@ -15,7 +15,8 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - Exploratory discovery: PC-lite + scored edges + optional 2SLS
 - **Mining** — column profiles, associations, KPI hints
 - **SLM** — `RuleBackend` always; optional HuggingFace for *creation* (questions/Z/morphemes) and *inference* (narrative/caveats)
-- **Direction guides** — soft-optional `LLMIntent` / `retracement` / Kineteq pivot embeddings → `DirectionPlan` (see [docs/GUIDES.md](docs/GUIDES.md))
+- **Direction guides** — soft-optional `LLMIntent` / `retracement` / Kineteq pivot embeddings / **GRAIL** → `DirectionPlan` (see [docs/GUIDES.md](docs/GUIDES.md), [docs/GRAIL.md](docs/GRAIL.md))
+- **GRAIL** (`autocausal.grail`) — embellished Kineteq Generative Reflective Agentic Imputation Loop; live MCP/module when configured, rich offline stub otherwise; MCP tools `autocausal_grail_*`
 - **suite_tools** — registry of causal/NLP/KPI/validation adapters (NLTK, gensim, DoWhy stubs, …)
 - **Physics loop** — analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`, optional **Streamlit demo** (`physics ui`)
 - **KPI ML loop** — SLM/Rule `ModelConstructPlan` → median/sklearn/**PyTorch MLP** impute → discover → FitReport ([docs/ML_KPI_LOOP.md](docs/ML_KPI_LOOP.md))
@@ -26,6 +27,7 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Insight suite** (`autocausal.insight`) — `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
 - **Auto suites** (`autocausal.suites`) — **SLM-directed** `AutoCleanseSuite` / `AutoEDASuite` / `AutoMineSuite` with dedicated action modules + `autocausal.skilling` tool surface ([docs/SUITES.md](docs/SUITES.md), [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md))
 - **MCP connective** (`autocausal.mcp` / `autocausal.connective`) — Model Context Protocol stdio server + in-process `AgentHook` so other agents can load/cleanse/mine/discover/report ([docs/MCP.md](docs/MCP.md))
+- **Agentic loop** (`autocausal.agentic`) — SLM-guided cyclic FSM: hypothesize → skill → validate → compact → persist → route, with MEM1-inspired memory + ACON-inspired compaction ([docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md))
 - **Fabric contracts** — `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
 - **Discovery stability & ensemble** — bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
 - **QC gate** — `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
@@ -60,7 +62,8 @@ Env:
 | `AUTOCAUSAL_TORCH=1` | Prefer PyTorch MLP imputer/predictor when installed |
 | `AUTOCAUSAL_TORCH_TEST=1` | Enable gated torch unit tests |
 | `AUTOCAUSAL_LLMINTENT_MODEL` | Optional LLMIntent heavy analyzer model |
-| `AUTOCAUSAL_KINETEQ_MCP=1` + `KINETEQ_MCP_URL` | Live Kineteq MCP pivot embeddings |
+| `AUTOCAUSAL_KINETEQ_MCP=1` + `KINETEQ_MCP_URL` | Live Kineteq MCP pivot embeddings / GRAIL |
+| `AUTOCAUSAL_GRAIL_MCP=1` | Also enables live GRAIL MCP calls |
 
 Better instruct SLMs (document only): `Qwen/Qwen2.5-0.5B-Instruct`, `HuggingFaceTB/SmolLM2-360M-Instruct`, `microsoft/Phi-3-mini-4k-instruct`.
 
@@ -89,12 +92,17 @@ print(ac.interpret().to_markdown())
 # Tool suite validation
 print(ac.validate_tools(y="y", d="d", z="z").to_markdown())
 
-# Direction steering (LLMIntent / retracement / Kineteq pivots — soft-optional)
+# Direction steering (LLMIntent / retracement / Kineteq pivots / GRAIL — soft-optional)
 plan = ac.direct(
     text="Does spend cause revenue?",
-    backends=["llmintent", "retracement", "kineteq_pivot", "rule"],
+    backends=["llmintent", "retracement", "kineteq_pivot", "grail", "rule"],
 )
 print(plan.to_markdown())
+
+# GRAIL reflective loop (offline stub unless Kineteq MCP configured)
+from autocausal.grail import GrailEngine
+report = GrailEngine().run("Does spend cause revenue?", context={"text": "Does spend cause revenue?"})
+print(report.to_markdown())
 
 # Physics predictive / autocausal loop
 from autocausal.physics import PhysicsCausalSuite
@@ -212,6 +220,23 @@ python -m autocausal suite mine --csv data.csv --format json -o mine.json
 
 See [docs/SUITES.md](docs/SUITES.md) and [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md).
 
+### Agentic causal loop (library-first)
+
+SLM-guided cyclic research loop with compaction + constant-budget memory (SOTA-inspired APIs — not paper clones):
+
+```python
+from autocausal import AutoCausal, load_dataset
+from autocausal.agentic import AgenticCausalLoop, run_agentic_loop
+
+df = load_dataset("iris")
+report = run_agentic_loop(df, text="petal drivers", max_rounds=2, use_slm=False)
+print(report.to_markdown())
+
+# Or: AutoCausal(...).agentic_loop(...) / MCP tool autocausal_agentic_loop
+```
+
+See [docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md).
+
 ### Use from other agents (MCP)
 
 Expose AutoCausal as MCP tools for Cursor, Claude Desktop, and other MCP clients — or call the same surface in-process via `AgentHook` (no `mcp` SDK required).
@@ -280,18 +305,18 @@ python -m autocausal insight demo --dataset iris --no-slm
 
 See [docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md) and [docs/EXAMPLES.md](docs/EXAMPLES.md).
 
-### Guiding direction with LLMIntent / Retracement / Kineteq pivots
+### Guiding direction with LLMIntent / Retracement / Kineteq pivots / GRAIL
 
 Backends are **soft-optional**: missing packages soft-fail to stubs/fallbacks and never break core discovery.
 
 ```bash
 python -m autocausal guides list
 python -m autocausal auto --csv data.csv --text "what causes revenue?" \
-  --guides llmintent,retracement,kineteq_pivot
-python -m autocausal direct --csv data.csv --text "..." --guides llmintent
+  --guides llmintent,retracement,kineteq_pivot,grail
+python -m autocausal direct --csv data.csv --text "..." --guides grail,rule
 ```
 
-See [docs/GUIDES.md](docs/GUIDES.md) for install paths, env vars, and `DirectionPlan` shape.
+See [docs/GUIDES.md](docs/GUIDES.md) and [docs/GRAIL.md](docs/GRAIL.md).
 
 ```bash
 python -m autocausal discover --csv data.csv
@@ -362,6 +387,7 @@ Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these ca
 - [Auto suites — Cleanse / EDA / Mine (SLM-directed)](docs/SUITES.md)
 - [SLM skilling / tool surface](docs/SLM_SKILLING.md)
 - [MCP connective (agents / Cursor / Claude)](docs/MCP.md)
+- [Agentic causal loop (compact + memory)](docs/AGENTIC_LOOP.md)
 - [Public causal mining (multi-source join)](docs/PUBLIC_CAUSAL_MINING.md)
 - [NLP & behavioral traces (library API)](docs/NLP_AND_BEHAVIORAL_TRACES.md)
 - [KPI ML loop (SLM → PyTorch)](docs/ML_KPI_LOOP.md)
@@ -369,6 +395,7 @@ Reports (InsightReport, PublicCausalReport, markdown CLI output) repeat these ca
 - [Physics Streamlit demo](docs/PHYSICS_DEMO.md)
 - [Physics world models + autocausal loop (SOTA)](docs/SOTA_PHYSICS_WORLD_MODEL_AUTOCAUSAL.md)
 - [Direction guides](docs/GUIDES.md)
+- [GRAIL (Kineteq adaptation)](docs/GRAIL.md)
 - [Tool suite registry](docs/SUITE_TOOLS.md)
 - [Connection matrix & pip extras](docs/CONNECTIONS.md)
 - [SOTA context (PC / GES / NOTEARS, imputation)](docs/SOTA.md)

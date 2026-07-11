@@ -212,7 +212,7 @@ def suite_tool_surface() -> ToolSurface:
             )
         )
 
-    # Soft discover / insight / experiment tools
+    # Soft discover / insight / experiment / GRAIL tools
     def _discover_tool(df: pd.DataFrame, **kwargs: Any) -> ActionResult:
         from autocausal.api import AutoCausal
 
@@ -302,5 +302,13 @@ def suite_tool_surface() -> ToolSurface:
             handler=_experiment_tool,
         )
     )
+
+    # Soft GRAIL tools (autocausal_grail_*) — never hard-require Kineteq
+    try:
+        from autocausal.grail import register_grail_skilling_tools
+
+        register_grail_skilling_tools(surface)
+    except Exception:
+        pass
 
     return surface

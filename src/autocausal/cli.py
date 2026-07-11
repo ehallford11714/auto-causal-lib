@@ -123,7 +123,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--guides",
         type=str,
         default=None,
-        help="Comma-separated backends: llmintent,retracement,kineteq_pivot,rule,huggingface",
+        help="Comma-separated backends: llmintent,retracement,kineteq_pivot,grail,rule,huggingface",
     )
     g.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     g.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
@@ -331,7 +331,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--guides",
         type=str,
         default="rule",
-        help="Comma-separated guides: rule,slm/huggingface,llmintent,kineteq_pivot",
+        help="Comma-separated guides: rule,slm/huggingface,llmintent,kineteq_pivot,grail",
     )
     ml_loop.add_argument("--horizon", type=int, default=5)
     ml_loop.add_argument("--no-physics", action="store_true")

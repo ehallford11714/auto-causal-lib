@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autocausal"
-version = "0.9.2"
-description = "Auto-impute, SLM-directed AutoCleanse/AutoEDA/AutoMine suites, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLM→PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
+version = "0.10.0"
+description = "Auto-impute, SLM-directed AutoCleanse/AutoEDA/AutoMine suites, agentic causal loop (compact+memory), Kineteq GRAIL soft loop, MCP/AgentHook connective tools, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLM→PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

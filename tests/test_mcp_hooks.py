@@ -22,6 +22,7 @@ EXPECTED_TOOLS = {
     "autocausal_mine",
     "autocausal_discover",
     "autocausal_insight_loop",
+    "autocausal_agentic_loop",
     "autocausal_recommend_experiments",
     "autocausal_public_mine",
     "autocausal_report",

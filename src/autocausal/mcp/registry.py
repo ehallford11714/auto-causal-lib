@@ -394,6 +394,89 @@ def _insight_loop(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         return err_payload(f"insight_loop failed: {e}", tool="autocausal_insight_loop", soft=True)
 
 
+def _agentic_loop(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    """Run AgenticCausalLoop (hypothesize→skill→validate→compact→persist→route)."""
+    sid = _sid(args)
+    text = str(args.get("text") or "")
+    use_slm = bool(args.get("use_slm")) if args.get("use_slm") is not None else False
+    max_rounds = int(args.get("max_rounds") or args.get("rounds") or 2)
+    persist_dir = args.get("persist_dir")
+    prefer_langgraph = (
+        bool(args.get("prefer_langgraph"))
+        if args.get("prefer_langgraph") is not None
+        else True
+    )
+    try:
+        from autocausal.agentic import AgenticCausalLoop, run_agentic_loop
+    except Exception as e:
+        return err_payload(
+            f"agentic module unavailable: {e}",
+            tool="autocausal_agentic_loop",
+            soft=True,
+        )
+    try:
+        if store.has(sid):
+            ac = store.get(sid)
+            loop = AgenticCausalLoop(
+                use_slm=use_slm,
+                max_rounds=max_rounds,
+                persist_dir=persist_dir,
+                prefer_langgraph=prefer_langgraph,
+            )
+            report = loop.run(ac=ac, text=text, max_rounds=max_rounds, use_slm=use_slm)
+        else:
+            path = args.get("path") or args.get("csv")
+            dataset_id = args.get("dataset_id")
+            if dataset_id:
+                from autocausal.api import AutoCausal
+                from autocausal.datasets import load_dataset
+
+                df = load_dataset(str(dataset_id))
+                ac = AutoCausal.from_dataframe(df, source=f"dataset:{dataset_id}")
+                store.put(ac, sid)
+                report = AgenticCausalLoop(
+                    use_slm=use_slm,
+                    max_rounds=max_rounds,
+                    persist_dir=persist_dir,
+                    prefer_langgraph=prefer_langgraph,
+                ).run(ac=ac, text=text, max_rounds=max_rounds, use_slm=use_slm)
+            elif path:
+                report = run_agentic_loop(
+                    str(path),
+                    text=text,
+                    use_slm=use_slm,
+                    max_rounds=max_rounds,
+                    persist_dir=persist_dir,
+                    prefer_langgraph=prefer_langgraph,
+                )
+            else:
+                return err_payload(
+                    "Need session_id with loaded data, or path/dataset_id",
+                    tool="autocausal_agentic_loop",
+                )
+
+        payload = report.to_dict() if hasattr(report, "to_dict") else to_jsonable(report)
+        md = report.to_markdown() if hasattr(report, "to_markdown") else None
+        if hasattr(store, "set_insight"):
+            try:
+                store.set_insight(sid, payload)
+            except Exception:
+                pass
+        return ok_payload(
+            tool="autocausal_agentic_loop",
+            session_id=sid,
+            agentic=payload,
+            markdown=md,
+            max_rounds=max_rounds,
+            n_rounds=getattr(report, "n_rounds", None),
+            runtime_backend=getattr(report, "runtime_backend", None),
+        )
+    except Exception as e:
+        return err_payload(
+            f"agentic_loop failed: {e}", tool="autocausal_agentic_loop", soft=True
+        )
+
+
 def _recommend_experiments(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
     sid = _sid(args)
     try:
@@ -689,6 +772,36 @@ def build_default_registry() -> ToolRegistry:
     )
     registry.register(
         ToolSpec(
+            name="autocausal_agentic_loop",
+            description=(
+                "Run SLM-guided agentic causal loop "
+                "(hypothesize→skill→validate→compact→persist→route). Soft LangGraph/FSM."
+            ),
+            parameters=_props(
+                {
+                    "session_id": {"type": "string"},
+                    "path": {"type": "string", "description": "CSV path if no session"},
+                    "dataset_id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "use_slm": {"type": "boolean", "default": False},
+                    "max_rounds": {"type": "integer", "default": 2},
+                    "persist_dir": {
+                        "type": "string",
+                        "description": "Optional JSONL episode directory",
+                    },
+                    "prefer_langgraph": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Try LangGraph if installed; else offline FSM",
+                    },
+                }
+            ),
+            handler=_agentic_loop,
+            optional_module="autocausal.agentic",
+        )
+    )
+    registry.register(
+        ToolSpec(
             name="autocausal_recommend_experiments",
             description="Recommend next experiments / mining steps from session context.",
             parameters=_props(
@@ -758,6 +871,62 @@ def build_default_registry() -> ToolRegistry:
             handler=_session_status,
         )
     )
+
+    # Soft GRAIL tools (Kineteq GRAIL adaptation — stub always available)
+    def _register_grail_tools() -> None:
+        try:
+            from autocausal.grail.mcp_tools import MCP_TOOL_SCHEMAS, dispatch_grail_tool
+            from autocausal.grail.types import EPISTEMIC as GRAIL_EPISTEMIC
+        except Exception:
+            return
+
+        def _make_handler(tool_name: str) -> Handler:
+            def _handler(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+                # Enrich from session frame when present
+                enriched = dict(args)
+                sid = _sid(args)
+                if store.has(sid):
+                    try:
+                        ac = store.get(sid)
+                        if "columns" not in enriched:
+                            enriched["columns"] = [str(c) for c in ac.df.columns]
+                        if "edges" not in enriched and ac.result is not None:
+                            enriched["edges"] = list(ac.result.edges or [])
+                        if not enriched.get("text") and not enriched.get("goal"):
+                            enriched["text"] = str(getattr(ac, "source", "") or "")
+                    except Exception:
+                        pass
+                out = dispatch_grail_tool(tool_name, enriched)
+                if not out.get("ok", True):
+                    return err_payload(
+                        str(out.get("error") or "grail tool failed"),
+                        tool=tool_name,
+                        soft=True,
+                    )
+                return ok_payload(tool=tool_name, session_id=sid, **{
+                    k: v for k, v in out.items() if k != "ok"
+                })
+
+            return _handler
+
+        for schema in MCP_TOOL_SCHEMAS:
+            name = schema["name"]
+            params = schema.get("parameters") or {}
+            props = dict(params.get("properties") or {})
+            # Allow session_id on all GRAIL tools
+            props.setdefault("session_id", {"type": "string"})
+            registry.register(
+                ToolSpec(
+                    name=name,
+                    description=schema["description"],
+                    parameters=_props(props, required=list(params.get("required") or [])),
+                    handler=_make_handler(name),
+                    optional_module="autocausal.grail",
+                    epistemic=GRAIL_EPISTEMIC,
+                )
+            )
+
+    _register_grail_tools()
 
     def _list_tools(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         return ok_payload(

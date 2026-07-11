@@ -91,6 +91,7 @@ def build_insight_report(
     relationships_mined_further: Optional[list[dict[str, Any]]] = None,
     round_history: Optional[list[dict[str, Any]]] = None,
     text: str = "",
+    grail: Optional[dict[str, Any]] = None,
 ) -> InsightReport:
     roles = RoleHypotheses.from_candidates(candidates)
     guide_backend = (guide or {}).get("backend") or ("huggingface" if use_slm else "rule")
@@ -131,6 +132,7 @@ def build_insight_report(
         data_sources=list(data_sources),
         guide_backend=str(guide_backend),
         guide=guide,
+        grail=grail,
         slm_narrative=narrative,
         slm_used=slm_used,
         nlp_hints=nlp_hints,

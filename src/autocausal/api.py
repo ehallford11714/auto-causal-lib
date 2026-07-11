@@ -975,6 +975,43 @@ class AutoCausal:
             **kwargs,
         )
 
+    def agentic_loop(
+        self,
+        *,
+        text: str = "",
+        use_slm: Optional[bool] = None,
+        model_name: Optional[str] = None,
+        max_rounds: int = 3,
+        persist_dir: Optional[Union[str, Path]] = None,
+        vector_backend: str = "auto",
+        prefer_langgraph: bool = True,
+        **kwargs: Any,
+    ) -> Any:
+        """Run SLM-guided agentic causal loop → ``AgenticLoopReport``.
+
+        Cyclic FSM: hypothesize → skill/tool → validate → compact → persist → route.
+        Soft optional LangGraph / vector backends. Prefer library import::
+
+            from autocausal.agentic import AgenticCausalLoop, run_agentic_loop
+        """
+        from autocausal.agentic import AgenticCausalLoop
+
+        loop = AgenticCausalLoop(
+            use_slm=bool(use_slm) if use_slm is not None else False,
+            model_name=model_name,
+            max_rounds=max_rounds,
+            persist_dir=persist_dir,
+            vector_backend=vector_backend,
+            prefer_langgraph=prefer_langgraph,
+        )
+        return loop.run(
+            ac=self,
+            text=text,
+            max_rounds=max_rounds,
+            use_slm=use_slm,
+            **kwargs,
+        )
+
     def report(self, *, as_markdown: bool = True) -> str:
         if self.result is None:
             self.discover()

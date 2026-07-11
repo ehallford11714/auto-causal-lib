@@ -119,6 +119,7 @@ call_tool("autocausal_list_datasets", {})
 | `autocausal_mine` | `automine` / `mine` |
 | `autocausal_discover` | `AutoCausal.discover` |
 | `autocausal_insight_loop` | `InsightSuite` / `run_insight_loop` |
+| `autocausal_agentic_loop` | `AgenticCausalLoop` / `run_agentic_loop` ([docs/AGENTIC_LOOP.md](AGENTIC_LOOP.md)) |
 | `autocausal_recommend_experiments` | `ExperimentRecommender.recommend` |
 | `autocausal_public_mine` | `AutoCausal.mine_public` |
 | `autocausal_report` | `AutoCausal.report` (markdown/json) |

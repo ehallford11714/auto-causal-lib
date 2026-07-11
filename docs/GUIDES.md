@@ -12,6 +12,7 @@ Missing packages never break import or the default `auto` / `mine` / `discover` 
 | `llmintent` | `LLMIntentGuide` | `pip install -e ../LLMIntent` (or `pip install llmintent`) |
 | `retracement` | `RetracementGuide` | Via `llmintent.retracement`, else **documented stub** |
 | `kineteq_pivot` | `KineteqPivotEmbeddingGuide` | Kineteq module / MCP, else **local `pivot_fallback`** (not Kineteq) |
+| `grail` / `kineteq_grail` | `KineteqGrailGuide` | Live Kineteq GRAIL when MCP/module set; else **rich `grail_stub`** (not full GRAIL) |
 
 Check what is live:
 
@@ -115,6 +116,21 @@ Env:
 | `AUTOCAUSAL_KINETEQ_EMBED_TOOL` | Prefer this tool name (default tries `embed_texts`, `pivot_embed`, …) |
 
 Also needs `httpx` (`pip install autocausal[web]`) for MCP.
+
+## KineteqGrailGuide (`grail` / `kineteq_grail`)
+
+**Origin:** Kineteq GRAIL — Generative Reflective Agentic Imputation Loop
+(`grail_impute` → `grail_compose` → `grail_run`). See [GRAIL.md](GRAIL.md).
+
+Adapter order:
+
+1. Optional local `kineteq` / `kineteq_grail` / `grail` module
+2. Kineteq MCP `tools/call` for `grail_run` / `grail_impute` / `grail_compose` when URL + live flag set
+3. **Rich offline stub** labeled `grail_stub` — structured impute/compose/fold/cycles/memory/graph; **not** live Kineteq
+
+```python
+plan = ac.direct(text="...", backends=["grail", "rule"])
+```
 
 ## CLI
 

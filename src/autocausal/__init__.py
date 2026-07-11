@@ -54,6 +54,12 @@ __all__ = [
     "SLMToolBroker",
     "suite_tool_surface",
     "AgentHook",
+    "GrailEngine",
+    "GrailReport",
+    "run_grail",
+    "AgenticCausalLoop",
+    "AgenticLoopReport",
+    "run_agentic_loop",
 ]
 
 
@@ -150,4 +156,21 @@ def __getattr__(name: str):
         from autocausal.connective import AgentHook, call_tool
 
         return {"AgentHook": AgentHook, "call_tool": call_tool}[name]
+    if name in ("GrailEngine", "GrailReport", "run_grail", "grail_backend_status"):
+        from autocausal import grail as _grail
+
+        return getattr(_grail, name)
+    if name in (
+        "AgenticCausalLoop",
+        "AgenticLoopReport",
+        "run_agentic_loop",
+        "LoopState",
+        "Compactor",
+        "GraphRuntime",
+        "VectorStoreMemory",
+        "AgentMemory",
+    ):
+        from autocausal import agentic as _agentic
+
+        return getattr(_agentic, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")

@@ -6,6 +6,7 @@ Soft-optional integrations:
 - llmintent (research/LLMIntent)
 - retracement (llmintent.retracement or stub)
 - kineteq_pivot (MCP / module / local hashing fallback)
+- grail / kineteq_grail (Kineteq GRAIL loop; rich offline stub)
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ __all__ = [
     "LLMIntentGuide",
     "RetracementGuide",
     "KineteqPivotEmbeddingGuide",
+    "KineteqGrailGuide",
     "BACKEND_ALIASES",
     "DEFAULT_BACKENDS",
     "list_guides",
@@ -55,6 +57,9 @@ BACKEND_ALIASES: dict[str, str] = {
     "kineteq": "kineteq_pivot",
     "pivot": "kineteq_pivot",
     "pivot_embed": "kineteq_pivot",
+    "grail": "kineteq_grail",
+    "kineteq_grail": "kineteq_grail",
+    "grail_run": "kineteq_grail",
 }
 
 DEFAULT_BACKENDS: tuple[str, ...] = ("rule",)
@@ -71,7 +76,20 @@ def _make(name: str, *, model_name: Optional[str] = None) -> Any:
         return RetracementGuide()
     if name == "kineteq_pivot":
         return KineteqPivotEmbeddingGuide()
+    if name == "kineteq_grail":
+        from autocausal.grail import KineteqGrailGuide
+
+        return KineteqGrailGuide()
     raise KeyError(f"Unknown guide backend: {name}")
+
+
+# Lazy re-export for type checkers / `from autocausal.guides import KineteqGrailGuide`
+def __getattr__(name: str) -> Any:
+    if name == "KineteqGrailGuide":
+        from autocausal.grail import KineteqGrailGuide as _G
+
+        return _G
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def resolve_backends(
@@ -147,6 +165,17 @@ def list_guides() -> list[dict[str, Any]]:
                 "else local pivot_fallback (not Kineteq)"
             ),
         },
+        {
+            "id": "kineteq_grail",
+            "name": "KineteqGrailGuide",
+            "available": True,  # stub always; live flagged in status/notes
+            "priority": 5,
+            "detail": (
+                "GRAIL impute/compose/run — live Kineteq when MCP/module set; "
+                "else rich offline grail_stub (not full Kineteq GRAIL). "
+                "Aliases: grail, kineteq_grail"
+            ),
+        },
     ]
 
 
@@ -166,7 +195,11 @@ def guides_status() -> dict[str, Any]:
             "AUTOCAUSAL_KINETEQ_MCP": __import__("os").environ.get(
                 "AUTOCAUSAL_KINETEQ_MCP", ""
             ),
+            "AUTOCAUSAL_GRAIL_MCP": __import__("os").environ.get(
+                "AUTOCAUSAL_GRAIL_MCP", ""
+            ),
         },
+        "grail": __import__("autocausal.grail", fromlist=["grail_backend_status"]).grail_backend_status(),
     }
 
 
