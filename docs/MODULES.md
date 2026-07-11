@@ -1,10 +1,10 @@
 # Module reference (`src/autocausal/`)
 
-Inventory of packages and public symbols as of **0.11.x**. Soft-optional heavy deps never hard-require install.
+Inventory of packages and public symbols as of **0.13.x**. Soft-optional heavy deps never hard-require install.
 
 > Exploratory outputs ≠ causal identification.
 
-Canonical pipeline: `load → mine → impute → discover → estimate → refute → guide/insight`.
+Canonical production path: `load → cleanse → EDA/association → plan → infer → refute/sensitivity`, with optional prediction kept separate.
 
 ---
 
@@ -15,11 +15,14 @@ Canonical pipeline: `load → mine → impute → discover → estimate → refu
 | `__init__.py` | Lazy re-exports | `AutoCausal`, `DiscoveryResult`, `AutoResult`, suites, insight, engines, … |
 | `__version__.py` | Version string | `__version__` |
 | `__main__.py` | `python -m autocausal` | → `cli.main` |
-| `api.py` | Primary façade | `AutoCausal` |
-| `cli.py` | CLI | `main` |
+| `api.py` | Primary façade | `AutoCausal` (`mode`, `policy`, `random_state`) |
+| `production.py` | Policy, evidence, manifests, gates, orchestration | `ProductionPolicy`, `RunManifest`, `EvidenceGrade`, `ProductionRun`, `run_production_pipeline` |
+| `statistical_gates.py` | Assumption/evidence diagnostics | sample/EPV, VIF, residual, overlap, weak-IV, power, BH-FDR gates |
+| `cli.py` | CLI | `main` (`doctor --production`) |
 | `engines.py` | Unified engine surface | `list_engines`, `engine_status`, `estimate`, `refute`, `discover_with`, `connectivity_map` |
 | `suite_tools.py` | Tool registry + refute | `list_tools`, `invoke_tool`, `validate_pipeline`, `refute`, `RefuteResult` |
 | `connective.py` | In-process agent broker | re-exports `AgentHook`, `call_tool`, `list_tools` |
+| `doctor.py` | Health + production checklist | `doctor_report`, `format_doctor_markdown` |
 
 ### `AutoCausal` (api.py) — main methods
 
@@ -27,7 +30,9 @@ Constructors: `from_csv`, `from_parquet`, `from_sqlalchemy`, `from_dataframe`, `
 
 Pipeline: `mine`, `impute`, `discover`, `discover_ensemble`, `cleanse`, `eda`, `automine`, `run`, `validate_qc`, `enrich_from_text`.
 
-Causal: `estimate`, `refute`, `engines_status`, `to_causaliv_request`, `sensitivity`, `set_panel`, `panel_features`.
+Causal: `infer`, `estimate`, `refute`, `production_check`, `run_production`, `engines_status`, `to_causaliv_request`, `sensitivity`, `set_panel`, `panel_features`.
+
+Association: `correlate` (typed pair or BH-FDR matrix scan).
 
 Guides: `guide`, `direct`, `create`, `interpret`, `ground`.
 
@@ -48,7 +53,7 @@ Export: `report`, `to_fabric_bundle`, `validate_tools`.
 | `mining.py` | Profiles / associations / KPIs | `mine`, `MiningReport`, `profile_dataframe` |
 | `discovery.py` | PC-lite + ensemble + soft backends | `discover_relationships`, `discover_ensemble`, `propose_candidates`, `consensus_edges` |
 | `iv.py` | 2SLS / CausalIV soft | `try_iv_edges` |
-| `results.py` | Result dataclasses | `DiscoveryResult`, `AutoResult` |
+| `results.py` | Result dataclasses + replay | `DiscoveryResult`, `AutoResult`, `replay_config`, `reproduce` |
 | `report.py` | Markdown render | `render_markdown_report`, `render_auto_markdown` |
 | `qc.py` | ID leakage / hygiene gate | `validate_frame`, `QCReport`, `QCIssue` |
 | `join.py` | Multi-frame align | `align`, `suggest_keys`, `AlignReport` |
@@ -56,6 +61,9 @@ Export: `report`, `to_fabric_bundle`, `validate_tools`.
 | `sensitivity.py` | Sensitivity metrics | `compute_sensitivity`, `SensitivityReport` |
 | `grounding.py` | Edge grounding | `ground_edges`, `GroundingReport` |
 | `contracts/` | Fabric envelopes | `fabric_bundle`, `mining_to_mine_report`, `edges_to_causal_edge_envelopes` |
+| `correlation/` | Typed descriptive association | `CorrelationSuite`, `correlation`, `correlation_matrix`, typed results |
+| `inference/` | Explicit-design effect estimation | `CausalSpec`, `AutoInference`, `AutoInferencePlanner`, `CausalInferenceResult`, native estimators |
+| `ml/automl.py` | Leakage-safe prediction | `AutoML`, `AutoMLReport`, `run_automl` |
 
 ---
 

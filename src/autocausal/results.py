@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import weakref
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from autocausal.impute import ImputationReport
@@ -42,6 +43,12 @@ class DiscoveryResult:
     ensemble_methods: list[str] = field(default_factory=list)
     method_edges: Optional[dict[str, list[dict[str, Any]]]] = None
     sensitivity_report: Optional[dict[str, Any]] = None
+    mode: str = "exploratory"
+    run_id: str = ""
+    policy: dict[str, Any] = field(default_factory=dict)
+    evidence_gates: list[dict[str, Any]] = field(default_factory=list)
+    rejected_edges: list[dict[str, Any]] = field(default_factory=list)
+    manifest: Optional[Any] = field(default=None, repr=False, compare=False)
     # Attached at discover-time for standalone estimate/refute/fabric exports
     frame: Optional[Any] = field(default=None, repr=False, compare=False)
     source: str = ""
@@ -92,14 +99,25 @@ class DiscoveryResult:
         roles = {k: (v.value if hasattr(v, "value") else str(v)) for k, v in self.roles.items()}
         out: dict[str, Any] = {
             "method": self.method,
+            "mode": self.mode,
+            "run_id": self.run_id,
             "edges": self.edges,
+            "rejected_edges": self.rejected_edges,
+            "evidence_gates": self.evidence_gates,
             "graph": self.graph,
             "roles": roles,
             "candidates": self.candidates,
             "notes": self.notes,
             "stability_enabled": self.stability_enabled,
             "bootstrap_n": self.bootstrap_n,
+            "policy": dict(self.policy),
         }
+        if self.manifest is not None:
+            out["manifest"] = (
+                self.manifest.to_dict()
+                if hasattr(self.manifest, "to_dict")
+                else self.manifest
+            )
         if self.source:
             out["source"] = self.source
         if self.ensemble_methods:
@@ -107,11 +125,20 @@ class DiscoveryResult:
         if self.method_edges is not None:
             out["method_edges"] = self.method_edges
         if self.imputation is not None:
-            out["imputation"] = (
+            imputation = (
                 self.imputation.to_dict()
                 if hasattr(self.imputation, "to_dict")
                 else asdict(self.imputation)
             )
+            redact_values = (
+                self.mode == "production"
+                or bool(self.policy.get("redact_sample_values"))
+            )
+            if redact_values:
+                for column in imputation.get("columns") or []:
+                    if isinstance(column, dict) and "fill_value" in column:
+                        column["fill_value"] = "<redacted>"
+            out["imputation"] = imputation
         if self.mining is not None:
             out["mining"] = self.mining
         if self.guide is not None:
@@ -124,6 +151,127 @@ class DiscoveryResult:
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, default=str)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "DiscoveryResult":
+        """Restore the portable result surface (without raw frame/session refs)."""
+        from autocausal.production import RunManifest
+
+        payload = dict(value)
+        role_values: dict[str, ColumnRole] = {}
+        for column, role in (payload.get("roles") or {}).items():
+            try:
+                role_values[str(column)] = ColumnRole(str(role))
+            except ValueError:
+                role_values[str(column)] = ColumnRole.UNKNOWN
+        manifest_raw = payload.get("manifest")
+        manifest = (
+            RunManifest.from_dict(manifest_raw)
+            if isinstance(manifest_raw, dict)
+            else manifest_raw
+        )
+        return cls(
+            edges=list(payload.get("edges") or []),
+            graph=dict(payload.get("graph") or {}),
+            roles=role_values,
+            candidates={
+                str(key): [str(item) for item in items]
+                for key, items in (payload.get("candidates") or {}).items()
+            },
+            method=str(payload.get("method") or "score_pc_lite"),
+            notes=list(payload.get("notes") or []),
+            mining=payload.get("mining"),
+            guide=payload.get("guide"),
+            grounding=payload.get("grounding"),
+            stability_enabled=bool(payload.get("stability_enabled")),
+            bootstrap_n=int(payload.get("bootstrap_n") or 0),
+            ensemble_methods=list(payload.get("ensemble_methods") or []),
+            method_edges=payload.get("method_edges"),
+            sensitivity_report=payload.get("sensitivity"),
+            mode=str(payload.get("mode") or "exploratory"),
+            run_id=str(payload.get("run_id") or ""),
+            policy=dict(payload.get("policy") or {}),
+            evidence_gates=list(payload.get("evidence_gates") or []),
+            rejected_edges=list(payload.get("rejected_edges") or []),
+            source=str(payload.get("source") or ""),
+            manifest=manifest,
+        )
+
+    @classmethod
+    def from_json(cls, value: str) -> "DiscoveryResult":
+        payload = json.loads(value)
+        if not isinstance(payload, dict):
+            raise TypeError("DiscoveryResult JSON must contain an object")
+        return cls.from_dict(payload)
+
+    def replay_config(self) -> dict[str, Any]:
+        """Export replayable configuration without embedding raw data."""
+        if self.manifest is not None and hasattr(self.manifest, "replay_config"):
+            return self.manifest.replay_config()
+        return {
+            "schema": "AutoCausalReplayConfig.v1",
+            "mode": self.mode,
+            "policy": dict(self.policy),
+            "discover": {
+                "method": self.method,
+                "stability": self.stability_enabled,
+                "bootstrap_n": self.bootstrap_n,
+                "ensemble": bool(self.ensemble_methods),
+                "methods": list(self.ensemble_methods),
+            },
+        }
+
+    def reproduce(
+        self,
+        frame: Any = None,
+        *,
+        overrides: Optional[dict[str, Any]] = None,
+        verify_fingerprint: bool = True,
+    ) -> "DiscoveryResult":
+        """Replay discovery deterministically against an attached/supplied frame."""
+        from autocausal.api import AutoCausal
+        from autocausal.production import (
+            ProductionGateError,
+            ProductionPolicy,
+            build_data_fingerprint,
+        )
+
+        data = frame if frame is not None else self.dataframe()
+        if data is None:
+            raise RuntimeError("reproduce() requires an attached or supplied DataFrame")
+        config = self.replay_config()
+        expected = config.get("expected_data_fingerprint") or {}
+        actual = build_data_fingerprint(data)
+        if (
+            verify_fingerprint
+            and expected.get("sha256")
+            and actual.get("sha256") != expected.get("sha256")
+        ):
+            raise ProductionGateError(
+                "Replay data fingerprint does not match the original run.",
+                code="replay_fingerprint_mismatch",
+                recommendations=[
+                    "Supply the original frame or set verify_fingerprint=False "
+                    "only after deliberate review."
+                ],
+            )
+        policy_raw = config.get("policy") or self.policy
+        policy = ProductionPolicy.from_dict(policy_raw)
+        ac = AutoCausal.from_dataframe(
+            data,
+            source=self.source or "replay",
+            mode=str(config.get("mode") or self.mode),  # type: ignore[arg-type]
+            policy=policy,
+            random_state=int(config.get("random_state") or policy.random_state),
+        )
+        discover = dict(config.get("discover") or {})
+        for key in ("methods", "candidates", "focus_columns"):
+            if not discover.get(key):
+                discover.pop(key, None)
+        if discover.get("method") is None:
+            discover.pop("method", None)
+        discover.update(overrides or {})
+        return ac.discover(**discover)
 
     def to_markdown(self) -> str:
         from autocausal.report import render_markdown_report
@@ -138,6 +286,23 @@ class DiscoveryResult:
         if as_markdown:
             return self.to_markdown()
         return self.to_json()
+
+    def generate_report(
+        self,
+        path: str | Path,
+        *,
+        format: str = "pdf",
+        use_slm: bool = True,
+        policy: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Generate a policy-constrained report artifact from this result."""
+        from autocausal.reporting import ReportEngine, ReportPolicy
+
+        return ReportEngine(
+            use_slm=use_slm,
+            policy=policy or ReportPolicy.production(),
+        ).generate(source=self, output=path, format=format, **kwargs)
 
     def estimate(
         self,
@@ -486,6 +651,23 @@ class AutoResult:
         if as_markdown:
             return self.to_markdown()
         return self.to_json()
+
+    def generate_report(
+        self,
+        path: str | Path,
+        *,
+        format: str = "pdf",
+        use_slm: bool = True,
+        policy: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Generate a policy-constrained report artifact from this auto result."""
+        from autocausal.reporting import ReportEngine, ReportPolicy
+
+        return ReportEngine(
+            use_slm=use_slm,
+            policy=policy or ReportPolicy.production(),
+        ).generate(source=self, output=path, format=format, **kwargs)
 
     def to_causal_edges(self) -> list[dict[str, Any]]:
         """Export discovery edges as CausalEdge.v1 envelopes."""

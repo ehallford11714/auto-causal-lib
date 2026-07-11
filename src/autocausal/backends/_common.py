@@ -115,8 +115,10 @@ def resolve_roles(
             outcome = numeric[-1]
         if treatment is None and len(numeric) >= 2:
             treatment = numeric[0] if numeric[0] != outcome else numeric[1]
+    # ``x=None`` means "unspecified" → candidates then numeric auto-fill.
+    # ``x=[]`` means "explicitly no confounders" (production estimate path).
     controls = list(x) if x is not None else list(cands.get("confounder") or [])
-    if not controls and outcome and treatment:
+    if x is None and not controls and outcome and treatment:
         controls = [
             c
             for c in df.columns

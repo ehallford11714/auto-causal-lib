@@ -24,6 +24,7 @@ def estimate(
     x: Optional[list[str]] = None,
     candidates: Optional[dict[str, list[str]]] = None,
     method: str = "econml_linear_dml",
+    random_state: int = 0,
     **_kwargs: Any,
 ) -> dict[str, Any]:
     method_l = (method or "econml_linear_dml").lower().strip()
@@ -78,11 +79,19 @@ def estimate(
             from sklearn.ensemble import GradientBoostingRegressor
 
             est = CausalForestDML(
-                model_y=GradientBoostingRegressor(n_estimators=30, max_depth=2, random_state=0),
-                model_t=GradientBoostingRegressor(n_estimators=30, max_depth=2, random_state=0),
+                model_y=GradientBoostingRegressor(
+                    n_estimators=30,
+                    max_depth=2,
+                    random_state=int(random_state),
+                ),
+                model_t=GradientBoostingRegressor(
+                    n_estimators=30,
+                    max_depth=2,
+                    random_state=int(random_state),
+                ),
                 n_estimators=40,
                 min_samples_leaf=5,
-                random_state=0,
+                random_state=int(random_state),
             )
             backend = "econml.CausalForestDML"
         else:
@@ -92,7 +101,7 @@ def estimate(
             est = LinearDML(
                 model_y=LassoCV(cv=3, max_iter=2000),
                 model_t=LassoCV(cv=3, max_iter=2000),
-                random_state=0,
+                random_state=int(random_state),
             )
             backend = "econml.LinearDML"
 

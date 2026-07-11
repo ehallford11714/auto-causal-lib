@@ -67,7 +67,7 @@ def _qwen_model_ready(model_id: str | None = None) -> tuple[bool, str]:
 
 
 def test_version_bumped():
-    assert __version__.startswith("0.12")
+    assert __version__.startswith("0.14")
 
 
 def test_probe_and_recommend_qwen_offline():

@@ -34,6 +34,7 @@ class MineReport:
     source: str = ""
     backend: str = "rule"
     mining_backend: str = "autocausal.mining"
+    typed_associations: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +57,7 @@ class MineReport:
             "source": self.source,
             "backend": self.backend,
             "mining_backend": self.mining_backend,
+            "typed_associations": list(self.typed_associations),
         }
 
     def to_json(self, indent: int = 2) -> str:

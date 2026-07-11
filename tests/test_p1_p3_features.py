@@ -35,13 +35,9 @@ def _toy_df(n: int = 80, seed: int = 0) -> pd.DataFrame:
 
 
 def test_version_0_8_or_newer():
-    # 0.8 P1–P3 APIs remain; suites + skilling ship in 0.9.x; backends in 0.11
-    assert (
-        __version__.startswith("0.8")
-        or __version__.startswith("0.9")
-        or __version__.startswith("0.10")
-        or __version__.startswith("0.11")
-    )
+    # 0.8 P1-P3 APIs remain through the current minor release.
+    parts = [int(x) for x in __version__.split(".")[:3]]
+    assert parts >= [0, 13, 0]
 
 
 def test_fabric_contracts_mine_edges_bundle():

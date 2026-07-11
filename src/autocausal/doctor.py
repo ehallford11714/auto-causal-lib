@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import sys
 from importlib.util import find_spec
-from typing import Any
+from typing import Any, Mapping, Optional
 
 from autocausal.__version__ import __version__
+from autocausal.production import (
+    EPISTEMIC,
+    MATURITY,
+    ProductionPolicy,
+    production_checklist,
+)
 
 __all__ = ["doctor_report", "format_doctor_markdown"]
 
@@ -36,8 +42,16 @@ def _probe(name: str) -> bool:
         return False
 
 
-def doctor_report() -> dict[str, Any]:
-    """Return a JSON-serializable health snapshot for CLI / MCP debugging."""
+def doctor_report(
+    *,
+    production: bool = False,
+    policy: Optional[ProductionPolicy | Mapping[str, Any]] = None,
+) -> dict[str, Any]:
+    """Return a JSON-serializable health snapshot for CLI / MCP debugging.
+
+    When ``production=True``, also runs the production safety checklist
+    (default ``auto_instrument=False``, engines, QC, version).
+    """
     from autocausal.engines import engine_status, list_engines
 
     status = engine_status()
@@ -50,7 +64,7 @@ def doctor_report() -> dict[str, Any]:
 
     optional = {name: _probe(name) for name in _OPTIONAL_DEPS}
 
-    return {
+    report: dict[str, Any] = {
         "schema": "AutoCausalDoctor.v1",
         "version": __version__,
         "python": {
@@ -66,12 +80,21 @@ def doctor_report() -> dict[str, Any]:
             "status_schema": status.get("schema"),
         },
         "optional_deps": optional,
+        "maturity": dict(MATURITY),
         "notes": [
             "Heavy deps are soft-optional; core numpy/pandas path always works.",
             "Availability ≠ causal identification.",
             "Probes use find_spec only — packages are not imported.",
+            EPISTEMIC,
+            "Default discover(auto_instrument=False) — synthetic IV is opt-in only.",
         ],
     }
+    if production:
+        checklist = production_checklist(production=True, policy=policy)
+        report["production_checklist"] = checklist
+        report["production_ok"] = bool(checklist.get("ok"))
+        report["notes"] = list(report["notes"]) + list(checklist.get("notes") or [])
+    return report
 
 
 def format_doctor_markdown(report: dict[str, Any] | None = None) -> str:
@@ -84,6 +107,8 @@ def format_doctor_markdown(report: dict[str, Any] | None = None) -> str:
         "",
         f"**Version:** `{r.get('version')}`",
         f"**Python:** `{py.get('version')}` ({py.get('implementation')})",
+        "",
+        "> " + EPISTEMIC,
         "",
         "## Engines",
         "",
@@ -100,6 +125,23 @@ def format_doctor_markdown(report: dict[str, Any] | None = None) -> str:
     for name, ok in sorted((r.get("optional_deps") or {}).items()):
         mark = "yes" if ok else "no"
         lines.append(f"- `{name}`: {mark}")
+
+    maturity = r.get("maturity") or {}
+    if maturity:
+        lines += ["", "## Maturity labels", ""]
+        for k, v in sorted(maturity.items()):
+            lines.append(f"- `{k}`: {v}")
+
+    checklist = r.get("production_checklist")
+    if checklist:
+        lines += ["", "## Production checklist", ""]
+        lines.append(f"- **ok:** `{checklist.get('ok')}`")
+        lines.append(f"- failed: {checklist.get('n_failed')} · warnings: {checklist.get('n_warnings')}")
+        lines.append("")
+        for c in checklist.get("checks") or []:
+            mark = "PASS" if c.get("ok") else ("WARN" if c.get("warn_only") else "FAIL")
+            lines.append(f"- [{mark}] `{c.get('id')}` — {c.get('detail')}")
+
     lines += ["", "## Notes", ""]
     for note in r.get("notes") or []:
         lines.append(f"- {note}")

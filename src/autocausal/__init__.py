@@ -3,13 +3,53 @@
 from __future__ import annotations
 
 from autocausal.api import AutoCausal
+from autocausal.production import (
+    EvidenceGateError,
+    EvidenceGrade,
+    ProductionGateError,
+    ProductionPolicy,
+    ProductionRun,
+    ResourceLimitError,
+    RunManifest,
+    RunPolicy,
+    UnsafePayloadError,
+    run_production_pipeline,
+)
 from autocausal.results import AutoResult, DiscoveryResult
 from autocausal.__version__ import __version__
+from autocausal.correlation import (
+    CorrelationSuite,
+    correlation,
+    correlation_matrix,
+)
+from autocausal.inference import (
+    AutoInference,
+    AutoInferencePlanner,
+    CausalInferenceResult,
+    CausalSpec,
+)
 
 __all__ = [
     "AutoCausal",
     "DiscoveryResult",
     "AutoResult",
+    "ProductionPolicy",
+    "ProductionRun",
+    "run_production_pipeline",
+    "RunPolicy",
+    "RunManifest",
+    "EvidenceGrade",
+    "ProductionGateError",
+    "EvidenceGateError",
+    "ResourceLimitError",
+    "UnsafePayloadError",
+    "CorrelationSuite",
+    "correlation",
+    "correlation_matrix",
+    "AutoInference",
+    "AutoInferencePlanner",
+    "CausalInferenceResult",
+    "CausalSpec",
     "__version__",
     "create_from_context",
     "infer_from_results",
@@ -72,6 +112,28 @@ __all__ = [
     "SLMChainReport",
     "run_slm_langgraph_loop",
     "doctor_report",
+    "DeepResearchSuite",
+    "ResearchReport",
+    "ResearchPolicy",
+    "ResearchHandoff",
+    "ResearchBudget",
+    "SearchIntensity",
+    "CrossMatchEngine",
+    "IntensityRouter",
+    "to_research_handoff",
+    "expand_related_work_queries",
+    "match_prior_sources",
+    "ReportEngine",
+    "ReportPolicy",
+    "generate_report",
+    "AutoTabularML",
+    "AutoMLReport",
+    "AutoVizSuite",
+    "AutoVizReport",
+    "list_integrations",
+    "integration_status",
+    "invoke_capability",
+    "CapabilityRouter",
 ]
 
 
@@ -201,4 +263,59 @@ def __getattr__(name: str):
         from autocausal.doctor import doctor_report
 
         return doctor_report
+    if name in (
+        "DeepResearchSuite",
+        "ResearchReport",
+        "ResearchPolicy",
+        "ResearchHandoff",
+        "ResearchBudget",
+        "to_research_handoff",
+        "SearchIntensity",
+        "CrossMatchEngine",
+        "IntensityRouter",
+        "LocalDocumentProvider",
+        "expand_related_work_queries",
+        "extract_reference_identifiers",
+        "match_prior_sources",
+    ):
+        from autocausal import research as _research
+
+        return getattr(_research, name)
+    if name in (
+        "ReportEngine",
+        "ReportPolicy",
+        "ReportArtifact",
+        "generate_report",
+    ):
+        from autocausal import reporting as _reporting
+
+        return getattr(_reporting, name)
+    if name in ("AutoTabularML", "AutoMLReport", "AutoMLGateError"):
+        from autocausal import automl as _automl
+
+        return getattr(_automl, name)
+    if name in ("AutoVizSuite", "AutoVizReport", "VizPlan"):
+        from autocausal import autoviz as _autoviz
+
+        return getattr(_autoviz, name)
+    if name in (
+        "list_integrations",
+        "integration_status",
+        "invoke_capability",
+        "CapabilityRouter",
+        "build_install_plan",
+    ):
+        from autocausal import integrations as _integrations
+
+        return getattr(_integrations, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")
+
+
+# Install conflict-light research methods without importing network/SLM models.
+# Existing host-class methods always win.
+try:
+    from autocausal.research.adapters import install_research_adapters
+
+    install_research_adapters()
+except Exception:
+    pass

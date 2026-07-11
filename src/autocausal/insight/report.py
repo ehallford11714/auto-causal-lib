@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Union
 
+from autocausal.production import EPISTEMIC_BANNER
+
 
 CAVEATS = [
     "Exploratory discovery ≠ identification — edges are candidate relationships, not causal effects.",
@@ -117,6 +119,7 @@ class InsightReport:
             lines.append(f"**Stages:** {' → '.join(self.stages)}")
         if self.round_history:
             lines.append(f"**Research rounds:** {len(self.round_history)}")
+        lines.extend(["", EPISTEMIC_BANNER, ""])
         lines.extend(["", "> Exploratory discovery ≠ identification. " + CAVEATS[0], ""])
 
         lines.extend(["## Summary", "", self.summary or "_No summary._", ""])

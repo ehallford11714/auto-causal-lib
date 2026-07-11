@@ -311,6 +311,120 @@ def discover_with(
     }
 
 
+_INFERENCE_BACKEND_MAP: dict[str, str] = {
+    "builtin_ols": "regression",
+    "regression": "regression",
+    "ols": "regression",
+    "builtin_2sls": "iv_2sls",
+    "2sls": "iv_2sls",
+    "iv": "iv_2sls",
+    "iv_2sls": "iv_2sls",
+    "aipw": "aipw",
+    "iptw": "iptw",
+    "matching": "matching",
+    "propensity_score": "propensity_score",
+    "difference_in_differences": "difference_in_differences",
+    "did": "difference_in_differences",
+    "panel_fixed_effects": "panel_fixed_effects",
+    "panel_fe": "panel_fixed_effects",
+    "regression_discontinuity": "regression_discontinuity",
+    "rdd": "regression_discontinuity",
+    "interrupted_time_series": "interrupted_time_series",
+    "its": "interrupted_time_series",
+    "doubleml": "doubleml",
+    "dml": "doubleml",
+    "plr": "doubleml",
+    "econml": "econml_linear_dml",
+    "linear_dml": "econml_linear_dml",
+    "econml_linear_dml": "econml_linear_dml",
+    "causal_forest": "econml_causal_forest",
+    "econml_causal_forest": "econml_causal_forest",
+    "cate": "econml_causal_forest",
+}
+
+
+def _estimate_via_inference(
+    df: pd.DataFrame,
+    *,
+    method: str,
+    y: str,
+    d: str,
+    x: Optional[list[str]] = None,
+    z: Optional[str] = None,
+    mode: str = "exploratory",
+    random_state: Optional[int] = None,
+    **kwargs: Any,
+) -> EstimateResult:
+    """Delegate to the unified AutoInference runtime and adapt the result."""
+    from autocausal.inference import AutoInference, CausalSpec
+
+    notes_base = ["Estimates are exploratory unless design assumptions hold."]
+    spec = CausalSpec(
+        treatment=d,
+        outcome=y,
+        confounders=list(x or []),
+        instrument=z,
+        instrument_provenance="observed" if z else "unknown",
+        unit=kwargs.pop("unit", None),
+        time=kwargs.pop("time", None),
+        post=kwargs.pop("post", None),
+        running=kwargs.pop("running", None),
+        cutoff=kwargs.pop("cutoff", None),
+        bandwidth=kwargs.pop("bandwidth", None),
+        cluster=kwargs.pop("cluster", None),
+    )
+    try:
+        fitted = AutoInference(
+            spec,
+            mode=mode,
+            random_state=random_state,
+        ).fit(df, method=method, **kwargs)
+    except Exception as exc:  # soft path for engines surface
+        return EstimateResult(
+            ok=False,
+            method=method,
+            backend="autocausal.inference",
+            soft_skip=True,
+            notes=notes_base + [f"AutoInference soft-skip: {exc}"],
+            error=str(exc),
+        )
+
+    payload = fitted.to_dict() if hasattr(fitted, "to_dict") else {}
+    diagnostics = dict(payload.get("diagnostics") or {})
+    estimate_payload = {
+        "ate": payload.get("estimate"),
+        "standard_error": payload.get("standard_error"),
+        "ci_low": payload.get("ci_low"),
+        "ci_high": payload.get("ci_high"),
+        "p_value": payload.get("p_value"),
+        "y": y,
+        "d": d,
+        "x": list(x or []),
+        "z": z,
+        "n": payload.get("n"),
+        "diagnostics": diagnostics,
+        "evidence_grade": payload.get("evidence_grade"),
+        "first_stage_f": diagnostics.get("first_stage_f"),
+    }
+    return EstimateResult(
+        ok=bool(payload.get("ok", True)),
+        method=str(payload.get("method") or method),
+        backend="autocausal.inference",
+        estimate=estimate_payload,
+        data={
+            "spec": payload.get("spec"),
+            "assumptions": payload.get("assumptions"),
+            "gates": payload.get("gates"),
+            "manifest": payload.get("manifest"),
+        },
+        notes=list(payload.get("notes") or []) + notes_base + [
+            "Routed through autocausal.inference (unified runtime)."
+        ],
+        soft_skip=bool(payload.get("soft_skip", False)),
+        error=payload.get("error"),
+    )
+
+
 def estimate(
     df: pd.DataFrame,
     *,
@@ -320,11 +434,67 @@ def estimate(
     x: Optional[list[str]] = None,
     candidates: Optional[dict[str, list[str]]] = None,
     z: Optional[str] = None,
+    mode: str = "exploratory",
+    random_state: Optional[int] = None,
     **kwargs: Any,
 ) -> EstimateResult:
-    """Estimate ATE/CATE via builtin / DoubleML / EconML soft backends."""
+    """Estimate ATE/CATE via unified inference / DoubleML / EconML soft backends.
+
+    Prefer explicit ``y`` / ``d``. When roles resolve, native backends route
+    through :class:`autocausal.inference.AutoInference` so statistical gates and
+    provenance stay consistent with ``AutoCausal.infer()``.
+    """
     b = (backend or "builtin_ols").lower().strip()
     notes_base = ["Estimates are exploratory unless design assumptions hold."]
+    mapped = _INFERENCE_BACKEND_MAP.get(b)
+
+    # Resolve roles for inference routing / OLS fallback.
+    from autocausal.backends._common import resolve_roles
+
+    roles = resolve_roles(df, y=y, d=d, x=x, candidates=candidates)
+    yy, dd, xx = roles["y"], roles["d"], roles["x"]
+    zz = z
+    if zz is None and candidates:
+        instruments = list(candidates.get("instrument") or [])
+        zz = instruments[0] if instruments else None
+
+    if mapped and yy and dd and yy in df.columns and dd in df.columns:
+        # Keep optional DoubleML/EconML on their existing soft adapters, but still
+        # prefer AutoInference when those methods are registered there.
+        if mapped in (
+            "regression",
+            "iv_2sls",
+            "aipw",
+            "iptw",
+            "matching",
+            "propensity_score",
+            "difference_in_differences",
+            "panel_fixed_effects",
+            "regression_discontinuity",
+            "interrupted_time_series",
+            "doubleml",
+            "econml_linear_dml",
+            "econml_causal_forest",
+        ):
+            if mapped == "iv_2sls" and not zz:
+                return EstimateResult(
+                    ok=True,
+                    method="iv_2sls",
+                    backend="autocausal.inference",
+                    soft_skip=True,
+                    notes=notes_base + ["IV estimate needs an observed z= instrument."],
+                )
+            return _estimate_via_inference(
+                df,
+                method=mapped,
+                y=yy,
+                d=dd,
+                x=list(xx or []),
+                z=zz,
+                mode=mode,
+                random_state=random_state,
+                **kwargs,
+            )
 
     if b in ("doubleml", "dml", "plr"):
         from autocausal.backends import doubleml_backend
@@ -358,27 +528,7 @@ def estimate(
             soft_skip=bool(raw.get("soft_skip")),
         )
 
-    if b in ("builtin_2sls", "2sls") and z:
-        from autocausal.suite_tools import invoke_tool
-
-        tr = invoke_tool("builtin_2sls", df=df, y=y, d=d, z=z, controls=x)
-        return EstimateResult(
-            ok=tr.ok,
-            method="builtin_2sls",
-            backend=tr.backend,
-            estimate=tr.data if tr.ok else None,
-            data={},
-            notes=list(tr.notes) + notes_base,
-            error=tr.error,
-            soft_skip=False,
-        )
-
-    # builtin OLS ATE-style
-    from autocausal.backends._common import resolve_roles
-    from numpy.linalg import lstsq
-
-    roles = resolve_roles(df, y=y, d=d, x=x, candidates=candidates)
-    yy, dd, xx = roles["y"], roles["d"], roles["x"]
+    # Last-resort legacy OLS when roles cannot be resolved for AutoInference.
     if not yy or not dd or yy not in df.columns or dd not in df.columns:
         return EstimateResult(
             ok=True,
@@ -398,6 +548,7 @@ def estimate(
             notes=notes_base + ["Too few rows for OLS."],
         )
     import numpy as np
+    from numpy.linalg import lstsq
 
     yv = work[yy].to_numpy(dtype=float)
     dv = work[dd].to_numpy(dtype=float)
@@ -418,7 +569,11 @@ def estimate(
             "x": xx,
             "n": len(work),
         },
-        notes=notes_base + ["Built-in OLS association — not an identified causal effect."],
+        notes=notes_base
+        + [
+            "Legacy OLS fallback — prefer AutoCausal.infer()/engines.estimate with explicit roles.",
+            "Built-in OLS association — not an identified causal effect.",
+        ],
     )
 
 

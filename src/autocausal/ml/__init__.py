@@ -22,6 +22,12 @@ from autocausal.ml.construct import (
 )
 from autocausal.ml.loop import KPIMinedCausalLoop, KPILoopResult
 from autocausal.ml.fit_report import FitReport
+from autocausal.ml.automl import (
+    AutoML,
+    AutoMLCandidateResult,
+    AutoMLReport,
+    run_automl,
+)
 
 __all__ = [
     "KPIMinedCausalLoop",
@@ -31,4 +37,8 @@ __all__ = [
     "construct_model_plan",
     "torch_available",
     "torch_preferred",
+    "AutoML",
+    "AutoMLCandidateResult",
+    "AutoMLReport",
+    "run_automl",
 ]

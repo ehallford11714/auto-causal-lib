@@ -1,4 +1,4 @@
-"""CLI: python -m autocausal discover|mine|ping|guide|direct|guides|create|infer|tools|auto|public|physics|ml|nlp|behavioral|insight|suite ...
+"""CLI: python -m autocausal discover|mine|correlate|tabular-ml|autoviz|report-artifact|...
 
 Thin consumer of library modules — prefer importing ``autocausal.suites`` /
 ``autocausal.nlp`` / ``autocausal.behavioral`` / ``autocausal.insight`` in apps.
@@ -36,10 +36,11 @@ def _parse_guides(raw: Optional[str]) -> Optional[list[str]]:
 
 
 def _load_ac(args: argparse.Namespace) -> AutoCausal:
+    mode = getattr(args, "mode", None) or "exploratory"
     if getattr(args, "csv", None):
-        ac = AutoCausal.from_csv(args.csv)
+        ac = AutoCausal.from_csv(args.csv, mode=mode)
     elif getattr(args, "parquet", None):
-        ac = AutoCausal.from_parquet(args.parquet)
+        ac = AutoCausal.from_parquet(args.parquet, mode=mode)
     elif getattr(args, "db", None):
         if not args.table and not getattr(args, "query", None):
             raise SystemExit("--db requires --table or --query")
@@ -49,6 +50,7 @@ def _load_ac(args: argparse.Namespace) -> AutoCausal:
             query=getattr(args, "query", None),
             schema=getattr(args, "schema", None),
             limit=getattr(args, "limit", None),
+            mode=mode,
         )
     else:
         raise SystemExit("Provide --csv, --parquet, or --db")
@@ -117,6 +119,11 @@ def _build_parser() -> argparse.ArgumentParser:
     # doctor
     doc = sub.add_parser("doctor", help="Environment / engine / optional-dep health check")
     doc.add_argument("--json", action="store_true", help="Emit JSON instead of markdown")
+    doc.add_argument(
+        "--production",
+        action="store_true",
+        help="Run production safety checklist (no default auto IV, engines, qc, version)",
+    )
     doc.add_argument("-o", "--out", type=str, default=None)
 
     # guide
@@ -419,9 +426,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     suite_sub = suite.add_subparsers(dest="suite_cmd")
     for name, help_txt in (
-        ("cleanse", "SLM-directed cleanse → CleanseReport"),
-        ("eda", "SLM-directed EDA → EDAReport"),
-        ("mine", "SLM-directed mine → MineReport"),
+        ("cleanse", "SLM-directed cleanse -> CleanseReport"),
+        ("eda", "SLM-directed EDA -> EDAReport"),
+        ("mine", "SLM-directed mine -> MineReport"),
     ):
         sp = suite_sub.add_parser(name, help=help_txt)
         _add_source_args(sp)
@@ -497,6 +504,90 @@ def _build_parser() -> argparse.ArgumentParser:
     mcp_p = sub.add_parser("mcp", help="MCP server info (run: python -m autocausal.mcp)")
     mcp_p.add_argument("--list-tools", action="store_true", dest="list_tools")
 
+    research = sub.add_parser(
+        "research",
+        help="Citation-grounded deep research with intensity + cross-match",
+    )
+    research_sub = research.add_subparsers(dest="research_cmd")
+    research_plan = research_sub.add_parser(
+        "plan", help="Plan intensity/agenda without retrieval"
+    )
+    _add_source_args(research_plan)
+    research_plan.add_argument(
+        "--intensity",
+        choices=["quick", "standard", "deep", "exhaustive"],
+        default="standard",
+    )
+    research_plan.add_argument("--domain", type=str, default="general")
+    research_plan.add_argument(
+        "--population", type=str, default=None, help="Optional PECO population context"
+    )
+    research_plan.add_argument("-o", "--out", type=str, default=None)
+    research_run = research_sub.add_parser(
+        "run", help="Run offline/local deep research after discover"
+    )
+    _add_source_args(research_run)
+    research_run.add_argument(
+        "--intensity",
+        choices=["quick", "standard", "deep", "exhaustive"],
+        default="standard",
+    )
+    research_run.add_argument("--domain", type=str, default="general")
+    research_run.add_argument("--population", type=str, default=None)
+    research_run.add_argument(
+        "--sources-json",
+        type=str,
+        default=None,
+        help="Optional local SourceRecord JSON list for offline retrieval",
+    )
+    research_run.add_argument(
+        "--approval",
+        action="store_true",
+        help="Grant exhaustive/high-impact approval when required",
+    )
+    research_run.add_argument(
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        dest="fmt",
+    )
+    research_run.add_argument("-o", "--out", type=str, default=None)
+    research_deepen = research_sub.add_parser(
+        "deepen",
+        help="Resume/deepen a prior ResearchReport JSON with higher intensity",
+    )
+    research_deepen.add_argument(
+        "--report-json",
+        type=str,
+        required=True,
+        help="Path to a previous ResearchReport JSON",
+    )
+    research_deepen.add_argument(
+        "--handoff-json",
+        type=str,
+        required=True,
+        help="Path to the original ResearchHandoff JSON",
+    )
+    research_deepen.add_argument(
+        "--intensity",
+        choices=["quick", "standard", "deep", "exhaustive"],
+        default="deep",
+    )
+    research_deepen.add_argument(
+        "--sources-json",
+        type=str,
+        default=None,
+        help="Optional local SourceRecord JSON list",
+    )
+    research_deepen.add_argument("--approval", action="store_true")
+    research_deepen.add_argument(
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        dest="fmt",
+    )
+    research_deepen.add_argument("-o", "--out", type=str, default=None)
+
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
 
@@ -512,7 +603,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # slm-loop / langgraph — LangGraph/FSM SLM chain
     sll = sub.add_parser(
         "slm-loop",
-        help="Run LangGraph/FSM SLM chain (guide→skill→validate→compact→insight→route)",
+        help="Run LangGraph/FSM SLM chain (guide->skill->validate->compact->insight->route)",
     )
     _add_source_args(sll, require=False)
     sll.add_argument("--text", type=str, default="")
@@ -537,6 +628,86 @@ def _build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
     lg.add_argument("-o", "--out", type=str, default=None)
 
+    # correlate — descriptive association (never causal identification)
+    corr = sub.add_parser(
+        "correlate",
+        help="Typed association / correlation matrix (descriptive, not causal)",
+    )
+    _add_source_args(corr)
+    corr.add_argument("--x", type=str, default=None, help="First variable (pair mode)")
+    corr.add_argument("--y", type=str, default=None, help="Second variable (pair mode)")
+    corr.add_argument(
+        "--columns",
+        type=str,
+        default=None,
+        help="Comma-separated columns for matrix mode",
+    )
+    corr.add_argument("--method", type=str, default="auto")
+    corr.add_argument("--controls", type=str, default=None, help="Comma-separated controls")
+    corr.add_argument("--bootstrap-n", type=int, default=0, dest="bootstrap_n")
+    corr.add_argument("--format", choices=["markdown", "json"], default="json", dest="fmt")
+    corr.add_argument("-o", "--out", type=str, default=None)
+
+    # tabular-ml — leakage-safe AutoTabularML
+    tml = sub.add_parser(
+        "tabular-ml",
+        help="Leakage-safe AutoTabularML (predictive metrics are not causal effects)",
+    )
+    _add_source_args(tml)
+    tml.add_argument("--target", type=str, required=True)
+    tml.add_argument(
+        "--features",
+        type=str,
+        default=None,
+        help="Comma-separated feature columns (default: all non-target)",
+    )
+    tml.add_argument("--task", type=str, default=None)
+    tml.add_argument("--group", type=str, default=None, dest="group_column")
+    tml.add_argument("--time", type=str, default=None, dest="time_column")
+    tml.add_argument("--mode", choices=["exploratory", "production"], default="exploratory")
+    tml.add_argument("--calibrate", action="store_true")
+    tml.add_argument("--format", choices=["markdown", "json"], default="json", dest="fmt")
+    tml.add_argument("-o", "--out", type=str, default=None)
+
+    # autoviz — analysis-aware chart planning
+    av = sub.add_parser(
+        "autoviz",
+        help="Plan analysis-aware visualizations (descriptive; not causal proof)",
+    )
+    _add_source_args(av)
+    av.add_argument("--discover", action="store_true", help="Run discover before planning")
+    av.add_argument("--slm", action="store_true", help="Allow optional SLM enrichment")
+    av.add_argument("--mode", choices=["exploratory", "production"], default="exploratory")
+    av.add_argument("--format", choices=["markdown", "json"], default="json", dest="fmt")
+    av.add_argument("-o", "--out", type=str, default=None)
+
+    # report-artifact — validated PDF/Markdown/HTML via ReportEngine
+    ra = sub.add_parser(
+        "report-artifact",
+        help="Generate a provenance-validated report artifact (PDF/MD/HTML/JSON)",
+    )
+    _add_source_args(ra)
+    ra.add_argument(
+        "--output",
+        type=str,
+        required=True,
+        help="Output path (.pdf / .md / .html / .json)",
+    )
+    ra.add_argument("--discover", action="store_true", help="Run mine+discover first")
+    ra.add_argument("--title", type=str, default="AutoCausal Analysis Report")
+    ra.add_argument(
+        "--profile",
+        choices=["production", "exploratory"],
+        default="production",
+    )
+    ra.add_argument("--format", type=str, default=None, help="Force format override")
+    ra.add_argument("--slm", action="store_true")
+
+    # integrations — lazy optional-dependency catalog / routing / install plans
+    from autocausal.integrations.cli import register_integrations_parser
+
+    register_integrations_parser(sub)
+
     return p
 
 
@@ -552,15 +723,23 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(DIALECT_MATRIX, indent=2))
         return 0
 
+    if args.command == "integrations":
+        from autocausal.integrations.cli import handle_integrations
+
+        return handle_integrations(args)
+
     if args.command == "doctor":
         from autocausal.doctor import doctor_report, format_doctor_markdown
 
-        report = doctor_report()
+        report = doctor_report(production=bool(getattr(args, "production", False)))
         if getattr(args, "json", False):
             text = json.dumps(report, indent=2)
         else:
             text = format_doctor_markdown(report)
         _emit(text, getattr(args, "out", None))
+        # Non-zero exit when --production and checklist failed
+        if getattr(args, "production", False) and not report.get("production_ok", True):
+            return 1
         return 0
 
     if args.command == "ping":
@@ -1265,6 +1444,195 @@ def main(argv: list[str] | None = None) -> int:
                     default=str,
                 )
             )
+        return 0
+
+    if args.command == "research":
+        from autocausal.research import (
+            DeepResearchSuite,
+            LocalDocumentProvider,
+            ResearchHandoff,
+            ResearchPolicy,
+            ResearchReport,
+            SourceRecord,
+        )
+
+        def _load_records(path: Optional[str]) -> list[Any]:
+            if not path:
+                return []
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(payload, list):
+                raise SystemExit("--sources-json must contain a JSON list")
+            return [
+                item if isinstance(item, SourceRecord) else SourceRecord.from_dict(item)
+                for item in payload
+            ]
+
+        if args.research_cmd == "plan":
+            ac = _load_ac(args)
+            ac.mine()
+            ac.impute()
+            ac.discover(use_iv=False, qc="off")
+            context: dict[str, Any] = {}
+            if getattr(args, "population", None):
+                context["population"] = args.population
+            handoff = ac.to_research_handoff(domain=args.domain, context=context)
+            suite = DeepResearchSuite(
+                policy=ResearchPolicy(allowed_providers=("local",)),
+                providers=[LocalDocumentProvider([])],
+            )
+            plan = suite.plan(handoff, intensity=args.intensity)
+            _emit(json.dumps(plan, indent=2, default=str), args.out)
+            return 0
+
+        if args.research_cmd == "run":
+            ac = _load_ac(args)
+            ac.mine()
+            ac.impute()
+            ac.discover(use_iv=False, qc="off")
+            context = {}
+            if getattr(args, "population", None):
+                context["population"] = args.population
+            records = _load_records(getattr(args, "sources_json", None))
+            suite = DeepResearchSuite(
+                policy=ResearchPolicy(
+                    allowed_providers=("local",),
+                    approval_granted=bool(getattr(args, "approval", False)),
+                ),
+                providers=[LocalDocumentProvider(records)],
+            )
+            report = ac.deep_research(
+                intensity=args.intensity,
+                domain=args.domain,
+                context=context,
+                suite=suite,
+                approval_granted=bool(getattr(args, "approval", False)),
+            )
+            payload = report.to_json() if args.fmt == "json" else report.to_markdown()
+            _emit(payload, args.out)
+            return 0
+
+        if args.research_cmd == "deepen":
+            report = ResearchReport.from_json(
+                Path(args.report_json).read_text(encoding="utf-8")
+            )
+            handoff = ResearchHandoff.from_dict(
+                json.loads(Path(args.handoff_json).read_text(encoding="utf-8"))
+            )
+            records = _load_records(getattr(args, "sources_json", None))
+            suite = DeepResearchSuite(
+                policy=ResearchPolicy(
+                    allowed_providers=("local",),
+                    approval_granted=bool(getattr(args, "approval", False)),
+                ),
+                providers=[LocalDocumentProvider(records)],
+            )
+            deepened = suite.resume(
+                report,
+                handoff=handoff,
+                intensity=args.intensity,
+                approval_granted=bool(getattr(args, "approval", False)),
+            )
+            payload = (
+                deepened.to_json() if args.fmt == "json" else deepened.to_markdown()
+            )
+            _emit(payload, args.out)
+            return 0
+
+        parser.parse_args(["research", "--help"])
+        return 0
+
+    if args.command == "correlate":
+        ac = _load_ac(args)
+        columns = (
+            [c.strip() for c in args.columns.split(",") if c.strip()]
+            if getattr(args, "columns", None)
+            else None
+        )
+        controls = (
+            [c.strip() for c in args.controls.split(",") if c.strip()]
+            if getattr(args, "controls", None)
+            else None
+        )
+        result = ac.correlate(
+            x=args.x,
+            y=args.y,
+            columns=columns,
+            method=args.method,
+            controls=controls,
+            bootstrap_n=int(args.bootstrap_n or 0),
+        )
+        if args.fmt == "markdown" and hasattr(result, "to_markdown"):
+            payload = result.to_markdown()
+        elif hasattr(result, "to_json"):
+            payload = result.to_json()
+        elif hasattr(result, "to_dict"):
+            payload = json.dumps(result.to_dict(), indent=2, default=str)
+        else:
+            payload = json.dumps(result, indent=2, default=str)
+        _emit(payload, args.out)
+        return 0
+
+    if args.command == "tabular-ml":
+        ac = _load_ac(args)
+        features = (
+            [c.strip() for c in args.features.split(",") if c.strip()]
+            if getattr(args, "features", None)
+            else None
+        )
+        report = ac.tabular_ml(
+            target=args.target,
+            features=features,
+            task=args.task,
+            group_column=getattr(args, "group_column", None),
+            time_column=getattr(args, "time_column", None),
+            calibrate=bool(args.calibrate),
+        )
+        if args.fmt == "markdown" and hasattr(report, "to_markdown"):
+            payload = report.to_markdown()
+        elif hasattr(report, "to_json"):
+            payload = report.to_json()
+        else:
+            payload = json.dumps(report.to_dict(), indent=2, default=str)
+        _emit(payload, args.out)
+        return 0
+
+    if args.command == "autoviz":
+        ac = _load_ac(args)
+        if args.discover:
+            ac.mine()
+            ac.impute()
+            ac.discover(use_iv=False, qc="off")
+        report = ac.autoviz(use_slm=bool(args.slm))
+        if args.fmt == "markdown" and hasattr(report, "to_markdown"):
+            payload = report.to_markdown()
+        elif hasattr(report, "to_json"):
+            payload = report.to_json()
+        else:
+            payload = json.dumps(report.to_dict(), indent=2, default=str)
+        _emit(payload, args.out)
+        return 0
+
+    if args.command == "report-artifact":
+        from autocausal.reporting import ReportEngine, ReportPolicy
+
+        ac = _load_ac(args)
+        if args.discover:
+            ac.mine()
+            ac.impute()
+            ac.discover(use_iv=False, qc="off")
+        policy = (
+            ReportPolicy.exploratory()
+            if args.profile == "exploratory"
+            else ReportPolicy.production()
+        )
+        artifact = ReportEngine(use_slm=bool(args.slm), policy=policy).generate(
+            source=ac,
+            output=Path(args.output),
+            format=args.format,
+            title=args.title,
+        )
+        _emit(json.dumps(artifact.to_dict(), indent=2, default=str), None)
+        print(f"Wrote {args.output}", file=sys.stderr)
         return 0
 
     parser.print_help()

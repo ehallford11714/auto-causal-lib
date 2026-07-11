@@ -106,6 +106,7 @@ class AutoMineSuite:
         fabric: Optional[dict[str, Any]] = None
         behavioral: Optional[dict[str, Any]] = None
         datamine_payload: Optional[dict[str, Any]] = None
+        typed_associations: list[dict[str, Any]] = []
 
         out = df
         for name in sequence:
@@ -192,6 +193,37 @@ class AutoMineSuite:
             except Exception as e:
                 warnings.append(f"DataMine soft-fail: {type(e).__name__}: {e}")
 
+        typed_columns = [
+            str(column)
+            for column in out.columns
+            if pd.api.types.is_numeric_dtype(out[column])
+            or out[column].nunique(dropna=True) <= 100
+        ][:12]
+        if len(typed_columns) >= 2:
+            try:
+                from autocausal.correlation import correlation_matrix
+
+                typed_scan = correlation_matrix(
+                    out,
+                    columns=typed_columns,
+                    method="auto",
+                    random_state=int(
+                        getattr(ac_in, "random_state", 0) if ac_in is not None else 0
+                    ),
+                )
+                typed_associations = [
+                    {
+                        **result.to_dict(),
+                        "evidence_type": "descriptive_association",
+                        "identification_evidence": False,
+                    }
+                    for result in typed_scan.results
+                ]
+            except Exception as e:
+                warnings.append(
+                    f"Typed association scan soft-fail: {type(e).__name__}: {e}"
+                )
+
         dir_dict = directives.to_dict()
         dir_dict["tools_invoked"] = tools_invoked
 
@@ -214,6 +246,7 @@ class AutoMineSuite:
             warnings=warnings,
             source=label,
             backend=directives.backend,
+            typed_associations=typed_associations,
         )
         self.frame = out
         self.report = report

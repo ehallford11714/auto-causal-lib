@@ -678,23 +678,49 @@ def discover_relationships(
     alpha: float = 0.05,
     max_cond_size: int = 2,
     min_abs_corr: float = 0.15,
-    use_iv: bool = True,
-    auto_instrument: bool = True,
+    use_iv: Optional[bool] = None,
+    auto_instrument: bool = False,
     allow_iv_fallback: bool = False,
     candidates: Optional[dict[str, Sequence[str]]] = None,
     method: DiscoveryMethod | str = "score_pc_lite",
-    stability: bool = False,
-    bootstrap_n: int = 20,
+    stability: Optional[bool] = None,
+    bootstrap_n: Optional[int] = None,
     seed: int = 0,
+    mode: str = "exploratory",
+    policy: Optional[Any] = None,
 ) -> "DiscoveryResult":
+    from autocausal.production import (
+        EPISTEMIC,
+        ProductionGateError,
+        apply_mode_defaults,
+        is_production,
+    )
     from autocausal.results import DiscoveryResult
+
+    settings = apply_mode_defaults(
+        mode=mode,
+        policy=policy,
+        auto_instrument=auto_instrument,
+        allow_iv_fallback=allow_iv_fallback,
+        use_iv=use_iv,
+        stability=stability,
+        bootstrap_n=bootstrap_n,
+    )
+    auto_instrument = settings.auto_instrument
+    allow_iv_fallback = settings.allow_iv_fallback
+    use_iv = settings.use_iv
+    stability = settings.stability
+    bootstrap_n = settings.bootstrap_n
 
     mat, cols = numeric_matrix(df, roles)
     method_s = str(method)
     notes: list[str] = [
-        "Exploratory heuristic discovery (PC-lite / lightweight / soft backends). "
-        "Not a guarantee of causal identification.",
+        EPISTEMIC,
+        "Heuristic discovery (PC-lite / lightweight / soft backends) is alpha — "
+        "not a guarantee of causal identification. Gate production with "
+        "mode='production' (ensemble+stability+QC block).",
     ]
+    notes.extend(settings.notes)
     if len(cols) < 2:
         return DiscoveryResult(
             edges=[],
@@ -703,6 +729,7 @@ def discover_relationships(
             candidates={"treatment": [], "outcome": [], "instrument": [], "confounder": []},
             method=method_s,
             notes=notes + ["Fewer than 2 usable columns for discovery."],
+            mode=settings.mode,
         )
 
     clean = mat.dropna()
@@ -713,6 +740,16 @@ def discover_relationships(
         edges, ext_notes = _run_external_method(method_s, clean, cols, alpha=alpha)
         notes.extend(ext_notes)
         if not edges:
+            if is_production(settings.mode):
+                raise ProductionGateError(
+                    f"Production discovery engine `{method_s}` produced no edges "
+                    "or was unavailable; heuristic fallback refused.",
+                    code="discovery_engine_failed",
+                    recommendations=[
+                        "Install/verify the requested engine or choose an available "
+                        "reviewed ensemble."
+                    ],
+                )
             # Fall back to pc_lite so callers still get a graph
             notes.append(f"{method_s} produced no edges — fell back to score_pc_lite.")
             edges = _pc_lite_edges(
@@ -790,6 +827,7 @@ def discover_relationships(
         notes=notes,
         stability_enabled=stability,
         bootstrap_n=int(bootstrap_n) if stability else 0,
+        mode=settings.mode,
     )
 
 
@@ -801,22 +839,43 @@ def discover_ensemble(
     alpha: float = 0.05,
     max_cond_size: int = 2,
     min_abs_corr: float = 0.15,
-    use_iv: bool = True,
-    auto_instrument: bool = True,
+    use_iv: Optional[bool] = None,
+    auto_instrument: bool = False,
     allow_iv_fallback: bool = False,
     candidates: Optional[dict[str, Sequence[str]]] = None,
-    stability: bool = False,
-    bootstrap_n: int = 10,
-    min_methods: int = 2,
+    stability: Optional[bool] = None,
+    bootstrap_n: Optional[int] = None,
+    min_methods: Optional[int] = None,
     seed: int = 0,
     include_optional: bool = True,
+    mode: str = "exploratory",
+    policy: Optional[Any] = None,
 ) -> "DiscoveryResult":
     """Run multiple discovery methods and return a consensus graph.
 
     When ``methods`` is omitted and ``include_optional`` is True, installed soft
     backends (causal-learn PC/GES, lingam, gcastle) are appended automatically.
     """
+    from autocausal.production import EPISTEMIC, apply_mode_defaults, is_production
     from autocausal.results import DiscoveryResult
+
+    settings = apply_mode_defaults(
+        mode=mode,
+        policy=policy,
+        auto_instrument=auto_instrument,
+        allow_iv_fallback=allow_iv_fallback,
+        use_iv=use_iv,
+        stability=stability,
+        bootstrap_n=bootstrap_n,
+        ensemble=True,
+        min_methods=min_methods,
+    )
+    auto_instrument = settings.auto_instrument
+    allow_iv_fallback = settings.allow_iv_fallback
+    use_iv = settings.use_iv
+    stability = settings.stability
+    bootstrap_n = settings.bootstrap_n
+    min_methods = settings.min_methods
 
     if methods is None:
         methods_list: list[str] = ["score_pc_lite", "corr_skeleton", "mi_binned"]
@@ -834,8 +893,10 @@ def discover_ensemble(
         methods = list(methods)
     mat, cols = numeric_matrix(df, roles)
     notes: list[str] = [
+        EPISTEMIC,
         f"Multi-method ensemble discovery: {list(methods)}. Consensus ≠ identification.",
     ]
+    notes.extend(settings.notes)
     if len(cols) < 2:
         return DiscoveryResult(
             edges=[],
@@ -845,6 +906,7 @@ def discover_ensemble(
             method="consensus",
             notes=notes + ["Fewer than 2 usable columns."],
             ensemble_methods=list(methods),
+            mode=settings.mode,
         )
 
     clean = mat.dropna()
@@ -879,11 +941,19 @@ def discover_ensemble(
         method_edges[m_s] = edges_m
 
     edges = consensus_edges(method_edges, min_methods=min_methods)
-    # if consensus empty (strict), fall back to union of pc_lite
+    # Exploratory can fall back; production fails closed with an empty candidate set.
     if not edges and method_edges:
-        primary = method_edges.get("score_pc_lite") or next(iter(method_edges.values()))
-        edges = list(primary)
-        notes.append("Consensus empty under min_methods; fell back to primary method edges.")
+        if is_production(settings.mode):
+            notes.append(
+                "PRODUCTION: consensus empty under min_methods; primary fallback refused."
+            )
+        else:
+            primary = method_edges.get("score_pc_lite") or next(iter(method_edges.values()))
+            edges = list(primary)
+            notes.append(
+                "EXPLORATORY fallback: consensus empty under min_methods; "
+                "used primary method edges."
+            )
 
     clean, edges, cand, iv_notes = _apply_iv_pass(
         clean,
@@ -934,4 +1004,5 @@ def discover_ensemble(
         bootstrap_n=int(bootstrap_n) if stability else 0,
         ensemble_methods=list(methods),
         method_edges={k: list(v) for k, v in method_edges.items()},
+        mode=settings.mode,
     )

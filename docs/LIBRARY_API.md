@@ -3,7 +3,9 @@
 Prefer importing from submodules; the top-level package lazy-re-exports common symbols.
 CLI (`python -m autocausal`) is a thin wrapper — see [CLI.md](CLI.md).
 
-> **Epistemic honesty:** discovery, mining, NLP hints, SLM text, estimate/refute, and agent loops are **exploratory**. They do not guarantee causal identification. Soft engines soft-skip when missing.
+> **Epistemic honesty:** discovery, mining, NLP hints, SLM text, estimate/refute,
+> and agent loops do not guarantee causal identification. Exploratory mode can
+> soft-fallback; production mode fails closed under its policy.
 
 **Install (PyPI name ≠ import name):**
 
@@ -14,7 +16,7 @@ python -c "import autocausal; print(autocausal.__version__)"
 
 Do **not** rely on `pip install autocausal` — that name was rejected / may resolve to a different project. Always install **`auto-causal-lib`**, then **`import autocausal`**.
 
-Doc index: [INDEX.md](INDEX.md) · Modules: [MODULES.md](MODULES.md) · Backends: [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).
+Doc index: [INDEX.md](INDEX.md) · Production: [PRODUCTION.md](PRODUCTION.md) · Modules: [MODULES.md](MODULES.md) · Backends: [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md).
 
 ---
 
@@ -23,6 +25,10 @@ Doc index: [INDEX.md](INDEX.md) · Modules: [MODULES.md](MODULES.md) · Backends
 | Symbol | Source |
 |--------|--------|
 | `AutoCausal`, `DiscoveryResult`, `AutoResult`, `__version__` | api / results |
+| `ProductionPolicy`, `RunPolicy`, `RunManifest`, `EvidenceGrade` | production |
+| `ProductionGateError`, `EvidenceGateError`, `ResourceLimitError`, `UnsafePayloadError` | production |
+| `CorrelationSuite`, `correlation`, `correlation_matrix` | correlation |
+| `CausalSpec`, `AutoInference`, `AutoInferencePlanner`, `CausalInferenceResult` | inference |
 | `create_from_context`, `infer_from_results`, `slm_status` | slm |
 | `list_tools`, `validate_pipeline`, `refute` | suite_tools |
 | `estimate`, `list_engines`, `engine_status` | engines |
@@ -52,6 +58,53 @@ print(result.report())       # same via DiscoveryResult.report() alias
 print(result.to_markdown())  # explicit
 print(ac.result.to_json())
 ```
+
+### Production policy / manifest / replay
+
+```python
+from autocausal import AutoCausal, ProductionPolicy
+
+policy = ProductionPolicy(random_state=42, required_evidence="supported")
+ac = AutoCausal.from_dataframe(df, mode="production", policy=policy)
+result = ac.discover()  # QC block + ensemble + stability
+print(result.manifest.to_json())  # no raw rows
+replayed = result.reproduce(df)
+```
+
+See [PRODUCTION.md](PRODUCTION.md) for gates, privacy/resource controls, and
+the 0.13 migration from `auto_instrument=True` default behavior.
+
+### Correlation, inference, and unified production
+
+```python
+from autocausal.correlation import correlation_matrix
+from autocausal.inference import CausalSpec, AutoInference
+from autocausal.production import run_production_pipeline
+
+associations = correlation_matrix(df, method="auto", random_state=42)
+
+spec = CausalSpec(
+    treatment="treatment",
+    outcome="outcome",
+    confounders=["age", "baseline"],
+)
+effect = AutoInference(spec, random_state=42).fit(df, method="aipw")
+
+# Fluent equivalents:
+ac.correlate("age", "outcome", method="spearman")
+ac.infer(spec=spec, method="aipw")
+ac.production_check(treatment="treatment", outcome="outcome")
+ac.run_production(
+    treatment="treatment",
+    outcome="outcome",
+    method="aipw",
+    confounders=["age", "baseline"],
+)
+```
+
+See [CORRELATION.md](CORRELATION.md) and
+[CAUSAL_INFERENCE.md](CAUSAL_INFERENCE.md) for exact native/adapter/deferred
+support and assumptions.
 
 ### Discovery
 
@@ -158,4 +211,4 @@ ac.ml_loop(text="…", use_torch=False)
 
 ## Version
 
-`autocausal.__version__` (0.11.4+). Roadmap: [ROADMAP.md](ROADMAP.md).
+`autocausal.__version__` (0.13.0+). Roadmap: [ROADMAP.md](ROADMAP.md).

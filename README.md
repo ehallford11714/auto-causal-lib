@@ -7,6 +7,75 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 > Scope is intentionally small: impute → role inference → PC-lite / score edges → optional IV → optional physics rollout.  
 > This is **not** a full AutoML OS and does **not** guarantee causal identification.
 
+## Production vs exploratory
+
+| | Exploratory (default) | Production (`mode="production"` / `strict=True`) |
+|--|----------------------|--------------------------------------------------|
+| `auto_instrument` | **False** (opt-in only) | Refused |
+| Synthetic IV | Demo plumbing if opted in (`identification=none`) | Never |
+| QC | `warn` | `block` (default; `off` refused) |
+| Discovery evidence | Heuristic edges reported | Ensemble + stability gates; insufficient edges rejected |
+| Estimate / refute | Soft role resolution OK | Explicit `y`/`d` (and real `z` for IV) |
+| SLM / raw MCP payload | Explicit opt-in paths | Denied by policy by default |
+
+`mode="review"` is the middle profile: strong checks produce auditable
+`escalate` decisions for human/domain review without silently adopting
+exploratory shortcuts.
+
+```python
+from autocausal import AutoCausal, ProductionPolicy
+
+policy = ProductionPolicy(
+    required_evidence="supported",
+    max_rows=100_000,
+    max_columns=200,
+    random_state=42,
+)
+ac = AutoCausal.from_dataframe(df, mode="production", policy=policy)
+result = ac.discover()  # QC block + ensemble + stability; no fake Z
+ac.estimate(y="y", d="d", backend="builtin_ols")
+print(result.manifest.to_json())  # config/fingerprint/events; no raw rows
+```
+
+```bash
+python -m autocausal doctor --production
+```
+
+Details: [docs/PRODUCTION.md](docs/PRODUCTION.md).
+
+The unified pipeline stops for method review unless a causal method is
+explicitly selected:
+
+```python
+from autocausal.production import ProductionPolicy, run_production_pipeline
+
+check = run_production_pipeline(
+    df,
+    treatment="treatment",
+    outcome="outcome",
+    confounders=["age", "baseline"],
+    policy=ProductionPolicy.strict(),
+    random_state=42,
+)
+print(check.status)  # review_required; planner recommends but does not choose
+
+run = run_production_pipeline(
+    df,
+    treatment="treatment",
+    outcome="outcome",
+    confounders=["age", "baseline"],
+    method="aipw",   # reviewed explicit choice
+    policy=ProductionPolicy.strict(),
+    random_state=42,
+)
+print(run.gates.report())
+```
+
+**0.13 migration:** `discover()` now defaults to `auto_instrument=False`.
+Synthetic Z is available only via explicit exploratory
+`discover(auto_instrument=True)`, and every such edge is
+`identification="none"` / `evidence_grade="insufficient"`.
+
 ## Features
 
 - Load from CSV, Parquet, or SQLAlchemy URLs (Postgres, Vertica, DuckDB, and more via extras)
@@ -16,7 +85,7 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Mining** - column profiles, associations, KPI hints
 - **SLM** - `RuleBackend` always; optional HuggingFace for *creation* (questions/Z/morphemes) and *inference* (narrative/caveats)
 - **Direction guides** - soft-optional `LLMIntent` / `retracement` / Kineteq pivot embeddings / **GRAIL** → `DirectionPlan` (see [docs/GUIDES.md](docs/GUIDES.md), [docs/GRAIL.md](docs/GRAIL.md))
-- **GRAIL** (`autocausal.grail`) - embellished Kineteq Generative Reflective Agentic Imputation Loop; live MCP/module when configured, rich offline stub otherwise; MCP tools `autocausal_grail_*`
+- **GRAIL** (`autocausal.grail`) - Kineteq Generative Reflective Agentic Imputation Loop; live MCP/module when configured, explicitly labeled offline stub/scaffold otherwise; MCP tools `autocausal_grail_*`
 - **suite_tools** - registry of causal/NLP/KPI/validation adapters (NLTK, gensim, DoWhy stubs, …)
 - **Physics loop** - analytic KPI dynamics (damped oscillator / drift-diffusion / linear ODE), physical insight grounding, `PhysicsCausalSuite.loop`, optional **Streamlit demo** (`physics ui`)
 - **KPI ML loop** - SLM/Rule `ModelConstructPlan` → median/sklearn/**PyTorch MLP** impute → discover → FitReport ([docs/ML_KPI_LOOP.md](docs/ML_KPI_LOOP.md))
@@ -32,6 +101,10 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Fabric contracts** - `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
 - **Discovery stability & ensemble** - bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
 - **QC gate** - `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
+- **Production runtime (0.13)** - typed `ProductionPolicy`, evidence grades/provenance, fail-closed gates, private `RunManifest`, deterministic replay, stage events, PII/resource controls
+- **Typed correlation** - Pearson/Spearman/Kendall/partial, weighted and winsorized Pearson, point-biserial, phi, bias-corrected Cramér's V, eta/eta², MI/NMI, distance correlation, bootstrap/cluster CI, and BH-FDR scans ([docs/CORRELATION.md](docs/CORRELATION.md))
+- **Unified causal inference** - explicit `CausalSpec`, review-only planner, native regression/IPTW/AIPW/matching/observed-IV/DiD/panel-FE/RDD/ITS, optional DoubleML/EconML adapters, and honest deferred catalog ([docs/CAUSAL_INFERENCE.md](docs/CAUSAL_INFERENCE.md))
+- **Production-oriented AutoML** - deterministic group/time-aware CV, fold-local preprocessing, baselines, calibration/imbalance/leakage/stability gates; prediction is explicitly separated from causality
 - **Panel / join / IV handoff** - `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks; optional exploratory `auto_instrument`
 - **Causal backends** - soft `causal-learn` / LiNGAM / gCastle discovery; DoubleML + EconML estimate; real DoWhy refute ([docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md))
 - **Engines surface** - `autocausal.engines` list/status + CLI `engines` / `estimate` / `refute`; MCP `autocausal_list_engines` / `_estimate` / `_refute`
@@ -73,7 +146,7 @@ python -m autocausal insight --help
 python -m autocausal.mcp
 ```
 
-**Docs:** [docs/INDEX.md](docs/INDEX.md) (full map) · [docs/MODULES.md](docs/MODULES.md) · [docs/CLI.md](docs/CLI.md) · [docs/MCP.md](docs/MCP.md) · [docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md) · [docs/LIBRARY_API.md](docs/LIBRARY_API.md).
+**Docs:** [docs/INDEX.md](docs/INDEX.md) (full map) · [docs/CORRELATION.md](docs/CORRELATION.md) · [docs/CAUSAL_INFERENCE.md](docs/CAUSAL_INFERENCE.md) · [docs/MODULES.md](docs/MODULES.md) · [docs/CLI.md](docs/CLI.md) · [docs/MCP.md](docs/MCP.md) · [docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md) · [docs/LIBRARY_API.md](docs/LIBRARY_API.md).
 
 From source (development):
 

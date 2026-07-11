@@ -320,8 +320,11 @@ def _discover(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         "qc",
         "drop_id_columns",
         "seed",
+        "random_state",
         "method",
         "include_optional",
+        "mode",
+        "strict",
     ):
         if key in args and args[key] is not None:
             kwargs[key] = args[key]
@@ -342,7 +345,12 @@ def _discover(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
             source=ac.source,
         )
     except Exception as e:
-        return err_payload(f"discover failed: {e}", tool="autocausal_discover")
+        gate_error = e.to_dict() if hasattr(e, "to_dict") else None
+        return err_payload(
+            f"discover failed: {e}",
+            tool="autocausal_discover",
+            gate_error=gate_error,
+        )
 
 
 def _list_engines(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
@@ -363,31 +371,31 @@ def _estimate(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
     try:
         if store.has(sid):
             ac = store.get(sid)
-            df = ac.df
-            candidates = ac.result.candidates if ac.result is not None else None
         elif args.get("path"):
             from autocausal import AutoCausal
 
             ac = AutoCausal.from_csv(str(args["path"]))
             store.put(ac, sid)
-            df = ac.df
-            candidates = None
         else:
             return err_payload("session_id or path required", tool="autocausal_estimate")
-        from autocausal.engines import estimate as eng_estimate
-
-        result = eng_estimate(
-            df,
+        result = ac.estimate(
             backend=str(args.get("backend") or "builtin_ols"),
             y=args.get("y"),
             d=args.get("d"),
             x=list(args["x"]) if args.get("x") else None,
             z=args.get("z"),
-            candidates=candidates,
+            mode=args.get("mode"),
+            strict=args.get("strict"),
+            random_state=args.get("random_state", getattr(ac, "random_state", 0)),
         )
         return ok_payload(tool="autocausal_estimate", session_id=sid, **result.to_dict())
     except Exception as e:
-        return err_payload(f"estimate failed: {e}", tool="autocausal_estimate")
+        gate_error = e.to_dict() if hasattr(e, "to_dict") else None
+        return err_payload(
+            f"estimate failed: {e}",
+            tool="autocausal_estimate",
+            gate_error=gate_error,
+        )
 
 
 def _refute(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
@@ -398,13 +406,120 @@ def _refute(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
             edge = args.get("edge")
             if edge is None and ac.result is not None and ac.result.edges:
                 edge = ac.result.edges[0]
-            result = ac.refute(edge=edge, method=str(args.get("method") or "placebo"))
+            result = ac.refute(
+                edge=edge,
+                method=str(args.get("method") or "placebo"),
+                y=args.get("y"),
+                d=args.get("d"),
+                z=args.get("z"),
+                mode=args.get("mode"),
+                strict=args.get("strict"),
+                seed=args.get("random_state", getattr(ac, "random_state", 0)),
+            )
         else:
             return err_payload("session_id required (load data first)", tool="autocausal_refute")
         payload = result.to_dict() if hasattr(result, "to_dict") else to_jsonable(result)
         return ok_payload(tool="autocausal_refute", session_id=sid, refute=payload)
     except Exception as e:
-        return err_payload(f"refute failed: {e}", tool="autocausal_refute")
+        gate_error = e.to_dict() if hasattr(e, "to_dict") else None
+        return err_payload(
+            f"refute failed: {e}",
+            tool="autocausal_refute",
+            gate_error=gate_error,
+        )
+
+
+def _session_or_path(args: dict[str, Any], store: SessionStore, *, tool: str):
+    sid = _sid(args)
+    if store.has(sid):
+        return store.get(sid), sid
+    if args.get("path"):
+        from autocausal import AutoCausal
+
+        ac = AutoCausal.from_csv(str(args["path"]))
+        store.put(ac, sid)
+        return ac, sid
+    raise ValueError(f"{tool}: session_id or path required")
+
+
+def _correlate(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    try:
+        ac, sid = _session_or_path(args, store, tool="autocausal_correlate")
+        result = ac.correlate(
+            x=args.get("x"),
+            y=args.get("y"),
+            columns=list(args["columns"]) if args.get("columns") else None,
+            method=str(args.get("method") or "auto"),
+            controls=list(args["controls"]) if args.get("controls") else None,
+            bootstrap_n=int(args.get("bootstrap_n") or 0),
+            permutation_n=int(args.get("permutation_n") or 0),
+            alpha=float(args.get("alpha") or 0.05),
+        )
+        payload = result.to_dict() if hasattr(result, "to_dict") else to_jsonable(result)
+        return ok_payload(
+            tool="autocausal_correlate",
+            session_id=sid,
+            identification_evidence=False,
+            correlation=payload,
+        )
+    except Exception as e:
+        return err_payload(f"correlate failed: {e}", tool="autocausal_correlate")
+
+
+def _tabular_ml(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    try:
+        ac, sid = _session_or_path(args, store, tool="autocausal_tabular_ml")
+        target = args.get("target")
+        if not target:
+            return err_payload("target is required", tool="autocausal_tabular_ml")
+        mode = args.get("mode")
+        if mode:
+            ac.mode = str(mode)
+        report = ac.tabular_ml(
+            target=str(target),
+            features=list(args["features"]) if args.get("features") else None,
+            task=args.get("task"),
+            group_column=args.get("group_column") or args.get("group"),
+            time_column=args.get("time_column") or args.get("time"),
+            calibrate=bool(args.get("calibrate", False)),
+            enforce_gates=args.get("enforce_gates"),
+        )
+        payload = report.to_dict() if hasattr(report, "to_dict") else to_jsonable(report)
+        return ok_payload(
+            tool="autocausal_tabular_ml",
+            session_id=sid,
+            identification_evidence=False,
+            report=payload,
+        )
+    except Exception as e:
+        gate_error = e.to_dict() if hasattr(e, "to_dict") else None
+        return err_payload(
+            f"tabular_ml failed: {e}",
+            tool="autocausal_tabular_ml",
+            gate_error=gate_error,
+        )
+
+
+def _autoviz(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    try:
+        ac, sid = _session_or_path(args, store, tool="autocausal_autoviz")
+        mode = args.get("mode")
+        if mode:
+            ac.mode = str(mode)
+        if args.get("discover"):
+            ac.mine()
+            ac.impute()
+            ac.discover(use_iv=False, qc="off")
+        report = ac.autoviz(use_slm=bool(args.get("use_slm", False)))
+        payload = report.to_dict() if hasattr(report, "to_dict") else to_jsonable(report)
+        return ok_payload(
+            tool="autocausal_autoviz",
+            session_id=sid,
+            identification_evidence=False,
+            report=payload,
+        )
+    except Exception as e:
+        return err_payload(f"autoviz failed: {e}", tool="autocausal_autoviz")
 
 
 def _insight_loop(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
@@ -706,9 +821,135 @@ def _list_mcp_tools(args: dict[str, Any], store: SessionStore) -> dict[str, Any]
     return ok_payload(tool="autocausal_list_tools", tools=[])
 
 
+def _list_integrations(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    from autocausal.integrations import list_integrations
+
+    items = list_integrations(
+        category=args.get("category"),
+        deep=bool(args.get("deep", False)),
+    )
+    return ok_payload(
+        tool="autocausal_list_integrations",
+        integrations=[item.to_dict() for item in items],
+        n=len(items),
+        telemetry_enabled=False,
+    )
+
+
+def _integration_status(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    from autocausal.integrations import integration_status
+
+    integration_id = args.get("integration_id") or args.get("id")
+    if not integration_id:
+        return err_payload(
+            "integration_id is required",
+            tool="autocausal_integration_status",
+        )
+    status = integration_status(
+        str(integration_id),
+        deep=bool(args.get("deep", False)),
+    )
+    return ok_payload(
+        tool="autocausal_integration_status",
+        integration=status.to_dict(),
+    )
+
+
+def _route_capability(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
+    from autocausal.integrations import (
+        CapabilityRouter,
+        ResourceBudget,
+        get_default_registry,
+    )
+
+    capability = args.get("capability")
+    if not capability:
+        return err_payload(
+            "capability is required",
+            tool="autocausal_route_capability",
+        )
+    budget_value = args.get("budget") or {}
+    budget = (
+        budget_value
+        if isinstance(budget_value, ResourceBudget)
+        else ResourceBudget(**dict(budget_value))
+    )
+    decision = CapabilityRouter(get_default_registry()).route(
+        str(capability),
+        policy=args.get("policy"),
+        budget=budget,
+        data_type=args.get("data_type"),
+        n_rows=args.get("n_rows"),
+        estimated_memory_mb=args.get("estimated_memory_mb"),
+        deep_health=bool(args.get("deep", False)),
+        context=args.get("context"),
+    )
+    return ok_payload(
+        tool="autocausal_route_capability",
+        decision=decision.to_dict(),
+        invoked=False,
+    )
+
+
 def build_default_registry() -> ToolRegistry:
     """Construct the default agent-facing tool surface."""
     registry = ToolRegistry()
+
+    registry.register(
+        ToolSpec(
+            name="autocausal_list_integrations",
+            description=(
+                "List maintained optional integrations without importing heavy packages."
+            ),
+            parameters=_props(
+                {
+                    "category": {"type": "string"},
+                    "deep": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Explicitly import registered adapters for health probes.",
+                    },
+                }
+            ),
+            handler=_list_integrations,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_integration_status",
+            description="Inspect one integration's install, version, policy, and health state.",
+            parameters=_props(
+                {
+                    "integration_id": {"type": "string"},
+                    "deep": {"type": "boolean", "default": False},
+                },
+                required=["integration_id"],
+            ),
+            handler=_integration_status,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_route_capability",
+            description=(
+                "Return a policy/resource routing decision without invoking an adapter."
+            ),
+            parameters=_props(
+                {
+                    "capability": {"type": "string"},
+                    "policy": {"type": "object"},
+                    "budget": {"type": "object"},
+                    "data_type": {"type": "string"},
+                    "n_rows": {"type": "integer"},
+                    "estimated_memory_mb": {"type": "integer"},
+                    "context": {"type": "object"},
+                    "deep": {"type": "boolean", "default": False},
+                },
+                required=["capability"],
+            ),
+            handler=_route_capability,
+        )
+    )
 
     registry.register(
         ToolSpec(
@@ -815,20 +1056,30 @@ def build_default_registry() -> ToolRegistry:
                     "use_iv": {"type": "boolean", "default": True},
                     "auto_instrument": {
                         "type": "boolean",
-                        "default": True,
-                        "description": "When instruments missing, synthesize exploratory auto_instrument_z",
+                        "default": False,
+                        "description": "Opt-in: synthesize exploratory auto_instrument_z (demo only; identification=none). Production mode refuses this.",
                     },
                     "allow_iv_fallback": {
                         "type": "boolean",
                         "default": False,
                         "description": "Propose weak correlate instrument candidates (not identification)",
                     },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["exploratory", "production"],
+                        "default": "exploratory",
+                        "description": "production refuses synthetic IV and applies policy ensemble+stability+QC gates",
+                    },
                     "candidates": {
                         "type": "object",
                         "description": "Optional role injection: treatment/outcome/instrument/confounder lists",
                     },
-                    "stability": {"type": "boolean", "default": False},
-                    "ensemble": {"type": "boolean", "default": False},
+                    "stability": {"type": "boolean"},
+                    "ensemble": {"type": "boolean"},
+                    "random_state": {
+                        "type": "integer",
+                        "description": "Unified deterministic seed for the run",
+                    },
                     "method": {
                         "type": "string",
                         "description": "Single method e.g. score_pc_lite, causal_learn_pc, lingam",
@@ -878,9 +1129,88 @@ def build_default_registry() -> ToolRegistry:
                     "d": {"type": "string"},
                     "x": {"type": "array", "items": {"type": "string"}},
                     "z": {"type": "string"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["exploratory", "production"],
+                    },
+                    "random_state": {"type": "integer"},
                 }
             ),
             handler=_estimate,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_correlate",
+            description=(
+                "Descriptive association / correlation analysis. "
+                "Never causal identification evidence."
+            ),
+            parameters=_props(
+                {
+                    "session_id": {"type": "string"},
+                    "path": {"type": "string"},
+                    "x": {"type": "string"},
+                    "y": {"type": "string"},
+                    "columns": {"type": "array", "items": {"type": "string"}},
+                    "method": {"type": "string", "default": "auto"},
+                    "controls": {"type": "array", "items": {"type": "string"}},
+                    "bootstrap_n": {"type": "integer", "default": 0},
+                    "permutation_n": {"type": "integer", "default": 0},
+                    "alpha": {"type": "number", "default": 0.05},
+                }
+            ),
+            handler=_correlate,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_tabular_ml",
+            description=(
+                "Run leakage-safe AutoTabularML. Predictive metrics are not "
+                "causal effects."
+            ),
+            parameters=_props(
+                {
+                    "session_id": {"type": "string"},
+                    "path": {"type": "string"},
+                    "target": {"type": "string"},
+                    "features": {"type": "array", "items": {"type": "string"}},
+                    "task": {"type": "string"},
+                    "group_column": {"type": "string"},
+                    "time_column": {"type": "string"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["exploratory", "production"],
+                    },
+                    "calibrate": {"type": "boolean", "default": False},
+                    "enforce_gates": {"type": "boolean"},
+                },
+                required=["target"],
+            ),
+            handler=_tabular_ml,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="autocausal_autoviz",
+            description=(
+                "Plan analysis-aware visualizations. Charts are descriptive "
+                "and do not prove causal effects."
+            ),
+            parameters=_props(
+                {
+                    "session_id": {"type": "string"},
+                    "path": {"type": "string"},
+                    "discover": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": False},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["exploratory", "production"],
+                    },
+                }
+            ),
+            handler=_autoviz,
         )
     )
     registry.register(
@@ -896,6 +1226,14 @@ def build_default_registry() -> ToolRegistry:
                         "description": "placebo | random_common_cause | dowhy | dowhy_data_subset | …",
                     },
                     "edge": {"type": "object"},
+                    "y": {"type": "string"},
+                    "d": {"type": "string"},
+                    "z": {"type": "string"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["exploratory", "production"],
+                    },
+                    "random_state": {"type": "integer"},
                 }
             ),
             handler=_refute,
@@ -1076,6 +1414,28 @@ def build_default_registry() -> ToolRegistry:
             )
 
     _register_grail_tools()
+
+    # Deep research stays in its own package; this narrow adapter avoids
+    # coupling the core registry to provider/SLM implementations.
+    try:
+        from autocausal.research.mcp import register_research_tools
+
+        register_research_tools(
+            registry,
+            tool_spec_cls=ToolSpec,
+            props_fn=_props,
+        )
+    except Exception:
+        # Optional surface: importing core AutoCausal must remain offline-safe.
+        pass
+
+    try:
+        from autocausal.reporting.tools import register_reporting_mcp_tools
+
+        register_reporting_mcp_tools(registry)
+    except Exception:
+        # Reporting stays lazy so MCP remains usable without PDF dependencies.
+        pass
 
     def _list_tools(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         return ok_payload(

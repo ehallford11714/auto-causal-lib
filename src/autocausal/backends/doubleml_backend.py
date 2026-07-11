@@ -24,6 +24,7 @@ def estimate(
     x: Optional[list[str]] = None,
     candidates: Optional[dict[str, list[str]]] = None,
     n_folds: int = 3,
+    random_state: int = 0,
     **_kwargs: Any,
 ) -> dict[str, Any]:
     notes = [
@@ -80,8 +81,16 @@ def estimate(
         try:
             # Prefer RF if sklearn available and n not tiny
             if len(work) >= 80:
-                ml_l = RandomForestRegressor(n_estimators=40, max_depth=4, random_state=0)
-                ml_m = RandomForestRegressor(n_estimators=40, max_depth=4, random_state=0)
+                ml_l = RandomForestRegressor(
+                    n_estimators=40,
+                    max_depth=4,
+                    random_state=int(random_state),
+                )
+                ml_m = RandomForestRegressor(
+                    n_estimators=40,
+                    max_depth=4,
+                    random_state=int(random_state),
+                )
         except Exception:
             pass
         model = dml.DoubleMLPLR(data, ml_l, ml_m, n_folds=max(2, int(n_folds)))

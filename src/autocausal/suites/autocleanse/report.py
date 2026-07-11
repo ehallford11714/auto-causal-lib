@@ -42,9 +42,20 @@ class CleanseReport:
     missingness: Optional[dict[str, Any]] = None
     source: str = ""
     backend: str = "rule"
+    schema: str = "AutoCausalCleanseReport.v2"
+    dry_run: bool = False
+    reversible: bool = True
+    policy_profile: str = "exploratory"
+    before_fingerprint: dict[str, Any] = field(default_factory=dict)
+    after_fingerprint: dict[str, Any] = field(default_factory=dict)
+    schema_violations: list[dict[str, Any]] = field(default_factory=list)
+    range_violations: list[dict[str, Any]] = field(default_factory=list)
+    pii_summary: dict[str, Any] = field(default_factory=dict)
+    gate_report: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema": self.schema,
             "n_rows_in": self.n_rows_in,
             "n_rows_out": self.n_rows_out,
             "n_cols_in": self.n_cols_in,
@@ -61,6 +72,15 @@ class CleanseReport:
             "missingness": self.missingness,
             "source": self.source,
             "backend": self.backend,
+            "dry_run": self.dry_run,
+            "reversible": self.reversible,
+            "policy_profile": self.policy_profile,
+            "before_fingerprint": dict(self.before_fingerprint),
+            "after_fingerprint": dict(self.after_fingerprint),
+            "schema_violations": list(self.schema_violations),
+            "range_violations": list(self.range_violations),
+            "pii_summary": dict(self.pii_summary),
+            "gate_report": self.gate_report,
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -73,6 +93,8 @@ class CleanseReport:
             f"- rows {self.n_rows_in} → {self.n_rows_out}",
             f"- cols {self.n_cols_in} → {self.n_cols_out}",
             f"- backend: `{self.backend}`",
+            f"- policy profile: `{self.policy_profile}`",
+            f"- dry run: `{self.dry_run}` · reversible: `{self.reversible}`",
             "",
             f"> {EPISTEMIC_NOTE}",
             "",
@@ -92,6 +114,13 @@ class CleanseReport:
             lines += ["", "## Dropped columns", ""]
             for c in self.dropped_columns:
                 lines.append(f"- `{c}`")
+        if self.schema_violations or self.range_violations:
+            lines += ["", "## Validation findings", ""]
+            for finding in self.schema_violations + self.range_violations:
+                lines.append(
+                    f"- `{finding.get('column')}`: {finding.get('issue')} "
+                    f"(n={finding.get('count', 0)})"
+                )
         if self.warnings:
             lines += ["", "## Warnings", ""]
             for w in self.warnings:

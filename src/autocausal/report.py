@@ -4,24 +4,95 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from autocausal.production import EPISTEMIC_BANNER, MATURITY, is_synthetic_instrument
+
 if TYPE_CHECKING:
     from autocausal.results import AutoResult, DiscoveryResult
+
+
+def _partition_edges(edges: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    assoc: list[dict[str, Any]] = []
+    iv_real: list[dict[str, Any]] = []
+    iv_synth: list[dict[str, Any]] = []
+    other: list[dict[str, Any]] = []
+    for e in edges or []:
+        t = str(e.get("type") or "")
+        z = e.get("instrument")
+        is_iv = t == "iv_2sls" or (z is not None and "iv" in t)
+        if is_iv:
+            if (
+                e.get("auto_instrument")
+                or e.get("synthetic")
+                or e.get("identification") == "none"
+                or is_synthetic_instrument(z)
+            ):
+                iv_synth.append(e)
+            else:
+                iv_real.append(e)
+        elif z is not None and is_synthetic_instrument(z):
+            iv_synth.append(e)
+        else:
+            assoc.append(e)
+    return {
+        "associations": assoc,
+        "iv_real": iv_real,
+        "iv_synth": iv_synth,
+        "other": other,
+    }
+
+
+def _edge_table(edges: list[dict[str, Any]], *, extra_cols: bool = False) -> list[str]:
+    lines: list[str] = []
+    if not edges:
+        lines.append("_None._")
+        return lines
+    if extra_cols:
+        lines.append(
+            "| source | target | type | instrument | evidence | identification | score | confidence | p-value |"
+        )
+        lines.append("|---|---|---|---|---|---|---:|---:|---:|")
+        for e in edges:
+            lines.append(
+                f"| `{e['source']}` | `{e['target']}` | {e.get('type', '')} | "
+                f"`{e.get('instrument', '')}` | {e.get('evidence_grade', 'exploratory')} | "
+                f"{e.get('identification', 'unverified')} | "
+                f"{e.get('score', '')} | {e.get('confidence', '')} | {e.get('pvalue', '')} |"
+            )
+    else:
+        lines.append("| source | target | type | evidence | stability | score | confidence | p-value |")
+        lines.append("|---|---|---|---|---:|---:|---:|---:|")
+        for e in edges:
+            lines.append(
+                f"| `{e['source']}` | `{e['target']}` | {e.get('type', '')} | "
+                f"{e.get('evidence_grade', 'exploratory')} | {e.get('stability', '')} | "
+                f"{e.get('score', '')} | {e.get('confidence', '')} | {e.get('pvalue', '')} |"
+            )
+    return lines
 
 
 def render_markdown_report(result: "DiscoveryResult") -> str:
     lines: list[str] = []
     lines.append("# AutoCausal discovery report")
     lines.append("")
+    lines.append(EPISTEMIC_BANNER)
+    lines.append("")
     lines.append(f"**Method:** `{result.method}`")
+    lines.append(f"**Mode:** `{getattr(result, 'mode', 'exploratory')}`")
+    if getattr(result, "run_id", ""):
+        lines.append(f"**Run ID:** `{result.run_id}`")
     lines.append("")
     lines.append(
-        "> Exploratory heuristics only — edges are candidate relationships, "
-        "not identified causal effects."
+        f"_Maturity:_ heuristic discovery `{MATURITY.get('heuristic_discovery')}`; "
+        f"auto_instrument `{MATURITY.get('auto_instrument')}`."
     )
     lines.append("")
 
     if result.imputation is not None:
         imp = result.imputation
+        redact_values = (
+            getattr(result, "mode", "exploratory") == "production"
+            or bool((getattr(result, "policy", {}) or {}).get("redact_sample_values"))
+        )
         lines.append("## Imputation")
         lines.append("")
         lines.append(
@@ -31,11 +102,35 @@ def render_markdown_report(result: "DiscoveryResult") -> str:
         if imp.columns:
             lines.append("- Columns:")
             for c in imp.columns:
-                lines.append(
-                    f"  - `{c.column}`: {c.strategy} "
-                    f"(filled {c.missing_before}, value={c.fill_value!r})"
-                )
+                if redact_values:
+                    lines.append(
+                        f"  - `{c.column}`: {c.strategy} "
+                        f"(filled {c.missing_before}; fill value redacted)"
+                    )
+                else:
+                    lines.append(
+                        f"  - `{c.column}`: {c.strategy} "
+                        f"(filled {c.missing_before}, value={c.fill_value!r})"
+                    )
         lines.append("")
+
+    gates = list(getattr(result, "evidence_gates", None) or [])
+    rejected = list(getattr(result, "rejected_edges", None) or [])
+    lines.append("## Evidence gates")
+    lines.append("")
+    lines.append(
+        f"- accepted edges: **{len(result.edges or [])}** · "
+        f"rejected edges: **{len(rejected)}** · failed gates: **{sum(1 for gate in gates if not gate.get('ok'))}**"
+    )
+    required = (getattr(result, "policy", {}) or {}).get("required_evidence")
+    if required:
+        lines.append(f"- required evidence: `{required}`")
+    for gate in gates:
+        mark = "PASS" if gate.get("ok") else "FAIL"
+        lines.append(f"- [{mark}] `{gate.get('id')}` — {gate.get('detail')}")
+        if gate.get("recommendation"):
+            lines.append(f"  - Escalation: {gate.get('recommendation')}")
+    lines.append("")
 
     lines.append("## Column roles")
     lines.append("")
@@ -51,19 +146,85 @@ def render_markdown_report(result: "DiscoveryResult") -> str:
         lines.append(f"- **{kind}:** {joined}")
     lines.append("")
 
-    lines.append("## Edges")
+    parts = _partition_edges(list(result.edges or []))
+    rejected_parts = _partition_edges(rejected)
+
+    lines.append("## Exploratory associations")
     lines.append("")
-    if not result.edges:
-        lines.append("_No edges above threshold._")
-    else:
-        lines.append("| source | target | type | score | confidence | p-value |")
-        lines.append("|---|---|---|---:|---:|---:|")
-        for e in result.edges:
+    lines.append(
+        "_Candidate relationships from heuristic discovery — not identified effects._"
+    )
+    lines.append("")
+    lines.extend(_edge_table(parts["associations"]))
+    lines.append("")
+
+    lines.append("## IV (only if real Z)")
+    lines.append("")
+    lines.append(
+        "_2SLS edges with a user-/name-provided instrument. Still **unverified** "
+        "identification — exclusion/relevance are not proven by this library._"
+    )
+    lines.append("")
+    lines.extend(_edge_table(parts["iv_real"], extra_cols=True))
+    lines.append("")
+
+    lines.append("## Synthetic IV (demo only)")
+    lines.append("")
+    lines.append(
+        "_`auto_instrument_z` / synthetic Z — **identification=none**. "
+        "Do not cite as science; plumbing/demo only._"
+    )
+    lines.append("")
+    lines.extend(
+        _edge_table(
+            list(parts["iv_synth"]) + list(rejected_parts["iv_synth"]),
+            extra_cols=True,
+        )
+    )
+    lines.append("")
+
+    if rejected:
+        lines.append("## Rejected by production gates")
+        lines.append("")
+        lines.append(
+            "_Retained for audit only; these edges are not production-eligible._"
+        )
+        lines.append("")
+        lines.extend(_edge_table(rejected, extra_cols=False))
+        lines.append("")
+
+    manifest = getattr(result, "manifest", None)
+    if manifest is not None:
+        manifest_dict = (
+            manifest.to_dict() if hasattr(manifest, "to_dict") else dict(manifest)
+        )
+        fingerprint = manifest_dict.get("data_fingerprint") or {}
+        privacy = manifest_dict.get("privacy") or {}
+        lines.append("## Reproducibility and privacy")
+        lines.append("")
+        lines.append(
+            f"- package: `{manifest_dict.get('package_version')}` · "
+            f"random_state: `{manifest_dict.get('random_state')}`"
+        )
+        lines.append(
+            f"- data fingerprint: `{str(fingerprint.get('sha256') or '')[:16]}…` "
+            f"({fingerprint.get('n_rows')}×{fingerprint.get('n_columns')}; no raw values)"
+        )
+        lines.append(f"- stage events: {len(manifest_dict.get('events') or [])}")
+        if privacy.get("pii_columns"):
             lines.append(
-                f"| `{e['source']}` | `{e['target']}` | {e.get('type', '')} | "
-                f"{e.get('score', '')} | {e.get('confidence', '')} | {e.get('pvalue', '')} |"
+                "- privacy warning: potential PII columns: "
+                + ", ".join(f"`{c}`" for c in privacy.get("pii_columns")[:12])
             )
-    lines.append("")
+        if privacy.get("high_cardinality_columns"):
+            lines.append(
+                "- high-cardinality columns: "
+                + ", ".join(
+                    f"`{c}`"
+                    for c in privacy.get("high_cardinality_columns")[:12]
+                )
+            )
+        lines.append("")
 
     if result.guide:
         lines.append("## Guide")
@@ -104,6 +265,8 @@ def render_markdown_report(result: "DiscoveryResult") -> str:
 
 def render_auto_markdown(result: "AutoResult") -> str:
     lines: list[str] = ["# AutoCausal auto report", ""]
+    lines.append(EPISTEMIC_BANNER)
+    lines.append("")
     lines.append(f"**Source:** `{result.source}`")
     lines.append("")
     if result.ping:

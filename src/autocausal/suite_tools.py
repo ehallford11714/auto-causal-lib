@@ -413,7 +413,24 @@ def _nlp_nltk(text: str = "", **_k: Any) -> ToolResult:
             notes=notes,
         )
     except Exception as e:
-        return ToolResult(tool_id="nltk", ok=False, backend="nltk", error=f"{type(e).__name__}: {e}")
+        # Installed NLTK without local corpora is still a soft-optional state.
+        # Stay offline/deterministic instead of failing or requiring a download.
+        tokens = re.findall(r"[A-Za-z']+", (text or "").lower())
+        return ToolResult(
+            tool_id="nltk",
+            ok=True,
+            backend="builtin_regex",
+            data={
+                "tokens": tokens[:80],
+                "pos": [],
+                "n_tokens": len(tokens),
+                "stopwords_removed": False,
+            },
+            notes=[
+                "NLTK resources unavailable; used deterministic regex fallback.",
+                f"NLTK soft-fail: {type(e).__name__}",
+            ],
+        )
 
 
 def _nlp_gensim(texts: Optional[list[str]] = None, text: str = "", **_k: Any) -> ToolResult:

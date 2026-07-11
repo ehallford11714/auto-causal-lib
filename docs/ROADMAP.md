@@ -1,5 +1,15 @@
 # AutoCausalLib roadmap
 
+## Shipped in 0.13.0 — production-readiness
+
+- [x] Safe `auto_instrument=False` default; synthetic IV is exploratory opt-in
+- [x] `ProductionPolicy` / `RunPolicy`, typed fail-closed exceptions, doctor checks
+- [x] Per-edge `EvidenceGrade`, provenance, accepted/rejected evidence gates
+- [x] Unified random state, private `RunManifest`, stage events, deterministic replay
+- [x] Resource, PII/redaction, external raw-payload, and SLM parse gates
+- [x] Production IV demo integration, public contract/serialization regressions
+- [x] [PRODUCTION.md](PRODUCTION.md) with migration guide and explicit deferred work
+
 ## Shipped in 0.11.4 — report() aliases + gap-closure
 
 - [x] `report(*, as_markdown=True)` on PublicCausalReport, BehavioralReport, GroundingReport

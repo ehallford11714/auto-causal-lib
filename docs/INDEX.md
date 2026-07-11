@@ -13,6 +13,8 @@ Package: **`auto-causal-lib`** on PyPI · import **`autocausal`** · version see
 | [CLI.md](CLI.md) | All `python -m autocausal` subcommands |
 | [MCP.md](MCP.md) | MCP stdio server + `AgentHook` tools |
 | [CAUSAL_BACKENDS.md](CAUSAL_BACKENDS.md) | Soft discovery / estimate / refute engines |
+| [CORRELATION.md](CORRELATION.md) | Typed association methods, FDR, and honest support matrix |
+| [CAUSAL_INFERENCE.md](CAUSAL_INFERENCE.md) | Unified causal specs/results, native portfolio, adapters, deferred catalog |
 
 ## Area guides
 
@@ -22,6 +24,8 @@ Package: **`auto-causal-lib`** on PyPI · import **`autocausal`** · version see
 | [SLM_SKILLING.md](SLM_SKILLING.md) | ToolSurface, SkillRegistry, broker |
 | [INSIGHT_SUITE.md](INSIGHT_SUITE.md) | InsightSuite + experiment loop |
 | [AGENTIC_LOOP.md](AGENTIC_LOOP.md) | AgenticCausalLoop FSM |
+| [ESCALATION_POLICIES.md](ESCALATION_POLICIES.md) | Edge-case escalation / deferral / HITL (draft) |
+| [PRODUCTION.md](PRODUCTION.md) | Production vs exploratory modes, doctor checklist, backlog |
 | [GRAIL.md](GRAIL.md) / [GUIDES.md](GUIDES.md) | GRAIL + direction guides |
 | [SUITE_TOOLS.md](SUITE_TOOLS.md) | Causal/NLP/KPI tool registry |
 | [NLP_AND_BEHAVIORAL_TRACES.md](NLP_AND_BEHAVIORAL_TRACES.md) | NLP + behavioral |
@@ -34,8 +38,9 @@ Package: **`auto-causal-lib`** on PyPI · import **`autocausal`** · version see
 ## Canonical pipeline
 
 ```
-load → [cleanse/eda] → mine → impute → discover(+soft backends)
-     → estimate(DoubleML|EconML|OLS) → refute(DoWhy|placebo)
+load → policy-aware cleanse → EDA/typed association → mine
+     → plan explicit design → infer(native|adapter) → refute/sensitivity
+     → optional fold-local AutoML (prediction, never identification)
      → guide/direct → insight / agentic / physics / ml
 ```
 

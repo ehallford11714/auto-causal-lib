@@ -241,25 +241,32 @@ def try_iv_edges(
                 if is_auto:
                     used_auto = True
                     conf *= 0.35  # down-weight synthetic IV confidence
-                edges.append(
-                    {
-                        "source": d,
-                        "target": y,
-                        "score": round(abs(res["coef"]), 4),
-                        "confidence": round(conf, 4),
-                        "pvalue": round(float(res.get("pvalue", 1.0)), 4),
-                        "type": "iv_2sls",
-                        "instrument": z,
-                        "orientation": method,
-                        "first_stage_f": round(float(res.get("first_stage_f", 0.0)), 3),
-                        "auto_instrument": is_auto,
-                    }
-                )
+                edge: dict[str, Any] = {
+                    "source": d,
+                    "target": y,
+                    "score": round(abs(res["coef"]), 4),
+                    "confidence": round(conf, 4),
+                    "pvalue": round(float(res.get("pvalue", 1.0)), 4),
+                    "type": "iv_2sls",
+                    "instrument": z,
+                    "orientation": method,
+                    "first_stage_f": round(float(res.get("first_stage_f", 0.0)), 3),
+                    "auto_instrument": is_auto,
+                    "synthetic": is_auto,
+                    # Real Z is still not "identified" without design assumptions;
+                    # synthetic Z is explicitly none.
+                    "identification": "none" if is_auto else "unverified",
+                }
+                if is_auto:
+                    from autocausal.production import tag_synthetic_iv_edge
+
+                    edge = tag_synthetic_iv_edge(edge)
+                edges.append(edge)
 
     if used_auto:
         notes.append(
-            "IV edges used auto-generated exploratory instrument(s) — "
-            "NOT causal identification; treat as plumbing/demo only."
+            "SYNTHETIC IV (demo only): auto-generated instrument(s) used — "
+            "identification=none; NOT causal identification; plumbing/demo only."
         )
     if used_suite:
         notes.append("IV edges estimated via CausalIVSuite/causaliv.")

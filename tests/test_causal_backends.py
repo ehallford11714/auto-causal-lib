@@ -26,8 +26,8 @@ def _toy_df(n: int = 80, seed: int = 0) -> pd.DataFrame:
     return pd.DataFrame({"z": z, "x": x, "y": y, "noise": rng.normal(size=n)})
 
 
-def test_version_0_11():
-    assert __version__.startswith("0.11")
+def test_version_0_13():
+    assert __version__.startswith("0.14")
 
 
 def test_backend_status_catalog():

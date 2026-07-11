@@ -311,4 +311,12 @@ def suite_tool_surface() -> ToolSurface:
     except Exception:
         pass
 
+    # Reporting tools are lazy and operate only on normalized report artifacts.
+    try:
+        from autocausal.reporting.tools import register_reporting_skilling_tools
+
+        register_reporting_skilling_tools(surface)
+    except Exception:
+        pass
+
     return surface

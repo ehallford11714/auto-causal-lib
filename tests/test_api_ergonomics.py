@@ -86,10 +86,9 @@ def ac_pipeline(iris_df):
     return ac, result
 
 
-def test_version_0_11_4_or_newer():
-    assert __version__.startswith("0.11.")
+def test_version_0_13_0_or_newer():
     parts = [int(x) for x in __version__.split(".")[:3]]
-    assert parts >= [0, 11, 4]
+    assert parts >= [0, 13, 0]
 
 
 @pytest.mark.parametrize("name", DISCOVERY_METHODS)
