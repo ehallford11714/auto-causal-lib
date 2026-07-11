@@ -191,7 +191,7 @@ def _cleanse(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
         text = str(args.get("text") or "")
         impute = str(args.get("impute") or "auto")
         ac.cleanse(
-            use_slm=bool(use_slm) if use_slm is not None else False,
+            use_slm=True if use_slm is None else bool(use_slm),
             text=text,
             impute=impute,
         )
@@ -233,7 +233,7 @@ def _eda(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
     try:
         use_slm = args.get("use_slm")
         text = str(args.get("text") or "")
-        ac.eda(use_slm=bool(use_slm) if use_slm is not None else False, text=text)
+        ac.eda(use_slm=True if use_slm is None else bool(use_slm), text=text)
         store.refresh_meta(sid)
         report = None
         if ac.eda_report is not None and hasattr(ac.eda_report, "to_dict"):
@@ -273,7 +273,7 @@ def _mine(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
             text = str(args.get("text") or "")
             try:
                 ac.automine(
-                    use_slm=bool(use_slm) if use_slm is not None else False,
+                    use_slm=True if use_slm is None else bool(use_slm),
                     text=text,
                     min_score=min_score,
                 )
@@ -510,7 +510,9 @@ def _autoviz(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
             ac.mine()
             ac.impute()
             ac.discover(use_iv=False, qc="off")
-        report = ac.autoviz(use_slm=bool(args.get("use_slm", False)))
+        report = ac.autoviz(
+            use_slm=True if args.get("use_slm") is None else bool(args.get("use_slm"))
+        )
         payload = report.to_dict() if hasattr(report, "to_dict") else to_jsonable(report)
         return ok_payload(
             tool="autocausal_autoviz",
@@ -525,7 +527,7 @@ def _autoviz(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
 def _insight_loop(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
     sid = _sid(args)
     text = str(args.get("text") or "")
-    use_slm = bool(args.get("use_slm")) if args.get("use_slm") is not None else False
+    use_slm = True if args.get("use_slm") is None else bool(args.get("use_slm"))
     max_rounds = int(args.get("max_rounds") or args.get("rounds") or 1)
     try:
         from autocausal.insight import InsightSuite, run_insight_loop
@@ -583,7 +585,7 @@ def _agentic_loop(args: dict[str, Any], store: SessionStore) -> dict[str, Any]:
     """Run AgenticCausalLoop (hypothesize→skill→validate→compact→persist→route)."""
     sid = _sid(args)
     text = str(args.get("text") or "")
-    use_slm = bool(args.get("use_slm")) if args.get("use_slm") is not None else False
+    use_slm = True if args.get("use_slm") is None else bool(args.get("use_slm"))
     max_rounds = int(args.get("max_rounds") or args.get("rounds") or 2)
     persist_dir = args.get("persist_dir")
     prefer_langgraph = (
@@ -673,7 +675,7 @@ def _recommend_experiments(args: dict[str, Any], store: SessionStore) -> dict[st
             soft=True,
         )
     try:
-        use_slm = bool(args.get("use_slm")) if args.get("use_slm") is not None else False
+        use_slm = True if args.get("use_slm") is None else bool(args.get("use_slm"))
         recommender = ExperimentRecommender(use_slm=use_slm)
         edges: list[dict[str, Any]] = []
         candidates: dict[str, Any] = {}
@@ -1000,7 +1002,7 @@ def build_default_registry() -> ToolRegistry:
             parameters=_props(
                 {
                     "session_id": {"type": "string"},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                     "text": {"type": "string"},
                     "impute": {
                         "type": "string",
@@ -1020,7 +1022,7 @@ def build_default_registry() -> ToolRegistry:
             parameters=_props(
                 {
                     "session_id": {"type": "string"},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                     "text": {"type": "string"},
                 }
             ),
@@ -1037,7 +1039,7 @@ def build_default_registry() -> ToolRegistry:
                     "session_id": {"type": "string"},
                     "min_score": {"type": "number", "default": 0.15},
                     "use_suite": {"type": "boolean", "default": True},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                     "text": {"type": "string"},
                 }
             ),
@@ -1203,7 +1205,7 @@ def build_default_registry() -> ToolRegistry:
                     "session_id": {"type": "string"},
                     "path": {"type": "string"},
                     "discover": {"type": "boolean", "default": False},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                     "mode": {
                         "type": "string",
                         "enum": ["exploratory", "production"],
@@ -1249,7 +1251,7 @@ def build_default_registry() -> ToolRegistry:
                     "path": {"type": "string", "description": "CSV path if no session"},
                     "dataset_id": {"type": "string"},
                     "text": {"type": "string"},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                     "max_rounds": {"type": "integer", "default": 1},
                 }
             ),
@@ -1270,7 +1272,7 @@ def build_default_registry() -> ToolRegistry:
                     "path": {"type": "string", "description": "CSV path if no session"},
                     "dataset_id": {"type": "string"},
                     "text": {"type": "string"},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                     "max_rounds": {"type": "integer", "default": 2},
                     "persist_dir": {
                         "type": "string",
@@ -1295,7 +1297,7 @@ def build_default_registry() -> ToolRegistry:
                 {
                     "session_id": {"type": "string"},
                     "text": {"type": "string"},
-                    "use_slm": {"type": "boolean", "default": False},
+                    "use_slm": {"type": "boolean", "default": True},
                 }
             ),
             handler=_recommend_experiments,

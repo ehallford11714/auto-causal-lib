@@ -375,7 +375,7 @@ class PrivacyPolicy:
 class OperationalPolicy:
     required_engines: tuple[str, ...] = ()
     fallback_behavior: FallbackBehavior = "fail"
-    allow_slm: bool = False
+    allow_slm: bool = True
     max_rows: int = 100_000
     max_columns: int = 200
     max_rounds: int = 3
@@ -464,7 +464,7 @@ class ProductionPolicy:
     fallback_behavior: FallbackBehavior = "fail"
     allow_iv_fallback: bool = False
     allow_synthetic_iv: bool = False
-    allow_slm: bool = False
+    allow_slm: bool = True
     allow_raw_data_external: bool = False
     redact_sample_values: bool = True
     fail_on_pii: bool = False
@@ -611,7 +611,7 @@ class ProductionPolicy:
             "ensemble": True,
             "required_evidence": EvidenceGrade.EXPLORATORY.value,
             "fallback_behavior": "warn",
-            "allow_slm": False,
+            "allow_slm": True,
             "causal_evidence": CausalEvidencePolicy(
                 require_explicit_roles=True,
                 require_observed_instrument=True,
@@ -620,7 +620,7 @@ class ProductionPolicy:
             ),
             "operational": OperationalPolicy(
                 fallback_behavior="warn",
-                allow_slm=False,
+                allow_slm=True,
             ),
         }
         base.update(overrides)
@@ -1858,7 +1858,7 @@ def run_production_pipeline(
             df,
             mode="production",
             policy=resolved_policy,
-            use_slm=False,
+            use_slm=True,
             dry_run=dry_run_cleanse,
         ).run()
     clean_frame = cleanse_suite.frame
@@ -1876,7 +1876,7 @@ def run_production_pipeline(
             clean_frame,
             mode="production",
             policy=resolved_policy,
-            use_slm=False,
+            use_slm=True,
             treatment=treatment,
             outcome=outcome,
             instrument=instrument,

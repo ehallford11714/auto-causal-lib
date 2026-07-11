@@ -64,7 +64,7 @@ def test_engines_iv_estimate_routes_through_inference():
 def test_top_level_expansion_exports():
     import autocausal as ac
 
-    assert ac.__version__ == "0.14.1"
+    assert ac.__version__ == "0.14.2"
     assert ac.DeepResearchSuite is not None
     assert ac.ReportEngine is not None
     assert ac.AutoTabularML is not None

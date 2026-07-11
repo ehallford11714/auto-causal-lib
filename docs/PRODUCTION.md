@@ -28,7 +28,7 @@ policy = ProductionPolicy(
     max_columns=200,
     max_rounds=3,
     max_seconds=300,
-    allow_slm=False,
+    allow_slm=True,
     allow_raw_data_external=False,
     random_state=42,
 )
@@ -174,8 +174,9 @@ Important fields:
   engines raise `ProductionGateError`; no silent soft backend.
 - `fallback_behavior`: `fail` in production, `warn` in exploratory.
 - `max_rows`, `max_columns`, `max_rounds`, `max_seconds`: resource limits.
-- `allow_slm`: false in production. If explicitly enabled, heuristic/raw-text
-  parsing still fails the structured parse gate.
+- `allow_slm`: **true by default** in every mode — SLM guides behavior and
+  soft-falls to deterministic rules when a model is unavailable. Pass
+  `use_slm=False` / `--no-slm` for rule-only runs.
 - `allow_raw_data_external`: false by default for MCP/SLM payload boundaries.
 - `redact_sample_values`: production reports redact imputation/fill values.
 - `fail_on_pii`: optionally convert PII warnings into a blocking gate.
@@ -258,8 +259,9 @@ Fingerprint mismatch fails unless deliberately overridden with
 - `ac.external_payload()` is summary-only.
 - `ac.external_payload(include_frame=True)` raises `UnsafePayloadError` unless
   the policy explicitly allows raw external payloads.
-- Production SLM use is denied by default, and raw DataFrames are not placed in
-  the guide/create/interpret contexts.
+- SLM guides by default in every mode; raw DataFrames are still kept out of
+  guide/create/interpret contexts unless `allow_raw_data_external=True`.
+  Soft rule fallback is audited when a local model is unavailable.
 
 This is a baseline, not a compliance certification. Perform your own access,
 retention, encryption, and regulatory review.

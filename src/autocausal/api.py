@@ -446,21 +446,29 @@ class AutoCausal:
         return payload
 
     def _assert_slm_allowed(self, requested: Optional[bool]) -> bool:
-        use_slm = bool(requested)
+        """SLM guides by default; only an explicit False turns it off.
+
+        ``None`` resolves to True when the active policy allows SLM.
+        """
+        from autocausal.suites.director import resolve_suite_slm
+
+        if requested is False:
+            return False
+        use_slm = resolve_suite_slm(True if requested is None else requested)
         if use_slm and not self.policy.allow_slm:
             raise UnsafePayloadError(
                 "SLM execution is disabled by the active production policy.",
                 code="slm_forbidden",
                 recommendations=[
-                    "Use deterministic rule backends, or explicitly review and "
-                    "set policy.allow_slm=True without allowing raw frames."
+                    "Set policy.allow_slm=True (default), or pass use_slm=False "
+                    "to force deterministic rule guidance only."
                 ],
                 manifest=self.run_manifest,
             )
         return use_slm
 
     def _validate_slm_result(self, result: Any, *, requested: bool) -> None:
-        """Production rejects heuristic parse or silent rule fallback."""
+        """Prefer SLM guidance; allow audited rule soft-fallback when needed."""
         if not (requested and is_production(self.mode)):
             return
         payload = (
@@ -471,34 +479,25 @@ class AutoCausal:
         backend = str(payload.get("backend") or "").lower()
         notes_blob = " ".join(str(note) for note in payload.get("notes") or []).lower()
         raw_text = str(payload.get("raw_text") or "")
-        unsafe = (
+        soft_fallback = (
             backend in ("", "rule", "fallback", "missing")
             or "heuristic" in notes_blob
-            or "soft" in notes_blob and "fallback" in notes_blob
+            or ("soft" in notes_blob and "fallback" in notes_blob)
             or bool(raw_text)
         )
-        if unsafe:
+        if soft_fallback:
+            detail = (
+                f"SLM guidance soft-fell back to backend={backend or 'rule'}"
+                + ("; raw SLM text ignored in favor of structured rules." if raw_text else ".")
+                + " Deterministic rules still guided the step."
+            )
             gate = GateResult(
-                id="unsafe_slm_parse",
-                ok=False,
-                detail=(
-                    f"SLM backend={backend or 'unknown'} did not provide a "
-                    "strictly validated structured parse."
-                ),
-                recommendation=(
-                    "Use deterministic rules or add a schema-validated SLM adapter; "
-                    "production refuses heuristic/raw-text parsing."
-                ),
+                id="slm_soft_fallback",
+                ok=True,
+                detail=detail,
+                recommendation="Install/configure a structured local SLM for fuller guidance.",
             )
             self.run_manifest.gates.append(gate)
-            raise UnsafePayloadError(
-                gate.detail,
-                code="unsafe_slm_parse",
-                gates=[gate],
-                recommendations=[gate.recommendation or ""],
-                partial_result=result,
-                manifest=self.run_manifest,
-            )
 
     def _limit_work_frame(self, frame: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
         """Apply policy row/column limits without silently truncating production."""
@@ -736,12 +735,9 @@ class AutoCausal:
         ``use_slm`` defaults to try-SLM (soft rule fallback); pass ``False`` to force rules.
         """
         from autocausal.suites import AutoCleanseSuite
-        from autocausal.suites.director import resolve_suite_slm
 
         requested = use_slm if use_slm is not None else self._suite_use_slm
-        if requested:
-            self._assert_slm_allowed(bool(requested))
-        slm = resolve_suite_slm(requested)
+        slm = self._assert_slm_allowed(requested)
         self._suite_use_slm = slm
         suite = AutoCleanseSuite(
             self,
@@ -769,12 +765,9 @@ class AutoCausal:
     ) -> "AutoCausal":
         """Run :class:`~autocausal.suites.AutoEDASuite`; stores ``eda_report``."""
         from autocausal.suites import AutoEDASuite
-        from autocausal.suites.director import resolve_suite_slm
 
         requested = use_slm if use_slm is not None else self._suite_use_slm
-        if requested:
-            self._assert_slm_allowed(bool(requested))
-        slm = resolve_suite_slm(requested)
+        slm = self._assert_slm_allowed(requested)
         self._suite_use_slm = slm
         suite = AutoEDASuite(self, use_slm=slm, text=text, **kwargs).run()
         self.eda_report = suite.report
@@ -792,12 +785,9 @@ class AutoCausal:
     ) -> "AutoCausal":
         """Run :class:`~autocausal.suites.AutoMineSuite`; stores ``mine_report`` + ``mining``."""
         from autocausal.suites import AutoMineSuite
-        from autocausal.suites.director import resolve_suite_slm
 
         requested = use_slm if use_slm is not None else self._suite_use_slm
-        if requested:
-            self._assert_slm_allowed(bool(requested))
-        slm = resolve_suite_slm(requested)
+        slm = self._assert_slm_allowed(requested)
         self._suite_use_slm = slm
         suite = AutoMineSuite(
             self,
@@ -1305,11 +1295,11 @@ class AutoCausal:
         self,
         *,
         text: Optional[str] = None,
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         model_name: Optional[str] = None,
         backends: Optional[list[str]] = None,
     ) -> Any:
-        """Run guide backends; multi-backend when ``backends`` is set."""
+        """Run guide backends; SLM guides by default (soft-falls to rules)."""
         use_slm = self._assert_slm_allowed(use_slm)
         if text:
             self.enrich_from_text(text)
@@ -1340,7 +1330,7 @@ class AutoCausal:
         *,
         text: Optional[str] = None,
         backends: Optional[list[str]] = None,
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         model_name: Optional[str] = None,
         second_pass: bool = True,
         **discover_kwargs: Any,
@@ -1348,8 +1338,8 @@ class AutoCausal:
         """
         Steer causal direction with one or more guide backends.
 
-        Merges outputs into a ``DirectionPlan``, optionally re-runs discover
-        focused on plan columns (second pass).
+        SLM guides by default. Merges outputs into a ``DirectionPlan``, optionally
+        re-runs discover focused on plan columns (second pass).
         """
         from autocausal.guides import direct as run_direct
 
@@ -2061,11 +2051,14 @@ class AutoCausal:
         self,
         *,
         text: Optional[str] = None,
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         model_name: Optional[str] = None,
         extra_context: Optional[dict[str, Any]] = None,
     ) -> Any:
-        """SLM/rule *creation*: propose questions, instruments, morphemes."""
+        """SLM/rule *creation*: propose questions, instruments, morphemes.
+
+        SLM guides by default and soft-falls to rules when unavailable.
+        """
         from autocausal.slm import create_from_context
 
         use_slm = self._assert_slm_allowed(use_slm)
@@ -2091,11 +2084,14 @@ class AutoCausal:
         self,
         *,
         text: Optional[str] = None,
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         model_name: Optional[str] = None,
         extra_context: Optional[dict[str, Any]] = None,
     ) -> Any:
-        """SLM/rule *inference* narrative + caveats over discovery/IV results."""
+        """SLM/rule *inference* narrative + caveats over discovery/IV results.
+
+        SLM guides by default and soft-falls to rules when unavailable.
+        """
         from autocausal.slm import infer_from_results
 
         use_slm = self._assert_slm_allowed(use_slm)
@@ -2166,7 +2162,7 @@ class AutoCausal:
         text: Optional[str] = None,
         domain: Union[str, list[str]] = "auto",
         system: str = "damped_oscillator",
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         second_pass: bool = True,
         use_web_ground: bool = False,
         impute_method: ImputeMethod = "auto",
@@ -2199,7 +2195,7 @@ class AutoCausal:
         self,
         *,
         text: str = "",
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         use_torch: Optional[bool] = None,
         guides: Optional[list[str]] = None,
         horizon: int = 5,
@@ -2227,7 +2223,7 @@ class AutoCausal:
         text: str,
         *,
         apply_guide: bool = False,
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
     ) -> "AutoCausal":
         """Build an empty-frame AutoCausal seeded with NLP causal hints.
 
@@ -2249,8 +2245,9 @@ class AutoCausal:
             # Guide with text only — mining on seed frame is uninformative
             from autocausal.slm import guide_pipeline
 
+            resolved = ac._assert_slm_allowed(use_slm)
             ac.guide_result = guide_pipeline(
-                hints.to_guide_context(), use_slm=use_slm
+                hints.to_guide_context(), use_slm=resolved
             )
         return ac
 
@@ -2335,11 +2332,11 @@ class AutoCausal:
         Prefer the library API in apps::
 
             from autocausal.insight import InsightSuite, run_insight_loop
-            report = InsightSuite.from_autocausal(ac).run(use_slm=False)
+            report = InsightSuite.from_autocausal(ac).run()
         """
         from autocausal.insight import InsightSuite
 
-        resolved_slm = self._assert_slm_allowed(bool(use_slm))
+        resolved_slm = self._assert_slm_allowed(use_slm)
         if "max_rounds" in kwargs:
             kwargs["max_rounds"] = self._limit_rounds(int(kwargs["max_rounds"]))
         suite = InsightSuite.from_autocausal(
@@ -2377,7 +2374,7 @@ class AutoCausal:
         """
         from autocausal.agentic import AgenticCausalLoop
 
-        resolved_slm = self._assert_slm_allowed(bool(use_slm))
+        resolved_slm = self._assert_slm_allowed(use_slm)
         max_rounds = self._limit_rounds(max_rounds)
         loop = AgenticCausalLoop(
             use_slm=resolved_slm,
@@ -2518,7 +2515,7 @@ class AutoCausal:
     def autoviz(
         self,
         *,
-        use_slm: bool = False,
+        use_slm: Optional[bool] = None,
         **kwargs: Any,
     ) -> Any:
         """Plan analysis-aware visualizations from the current session."""
@@ -2575,9 +2572,9 @@ class AutoCausal:
     ) -> AutoResult:
         """Orchestrated flow: load → [cleanse] → [eda] → join? → mine → impute → discover → guide → ground.
 
-        ``use_slm`` defaults to enabled in exploratory mode and disabled in
-        production. Production policy denies heuristic SLM parsing unless
-        explicitly permitted and schema-validated.
+        ``use_slm`` defaults to enabled in every mode (SLM guides behavior;
+        soft-falls to deterministic rules when a model is unavailable). Pass
+        ``use_slm=False`` to force rule-only guidance.
 
         ``mode="production"`` / ``strict=True`` propagates to discover (no synthetic
         IV, QC block, prefer ensemble+stability).
@@ -2596,15 +2593,18 @@ class AutoCausal:
             policy,
             random_state=random_state,
         )
-        requested_slm = (
-            resolved_mode == "exploratory" if use_slm is None else bool(use_slm)
-        )
+        if use_slm is False:
+            requested_slm = False
+        elif use_slm is True:
+            requested_slm = True
+        else:
+            requested_slm = True  # SLM guides by default in all modes
         if requested_slm and not effective_policy.allow_slm:
             raise UnsafePayloadError(
                 "AutoCausal.auto(use_slm=True) is forbidden by production policy.",
                 code="slm_forbidden",
                 recommendations=[
-                    "Pass use_slm=False or explicitly review policy.allow_slm=True."
+                    "Pass use_slm=False or set policy.allow_slm=True (default)."
                 ],
             )
         use_slm = resolve_suite_slm(requested_slm)

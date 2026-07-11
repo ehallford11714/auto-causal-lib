@@ -29,7 +29,7 @@ def register_reporting_skilling_tools(surface: Any) -> Any:
 
     def _plan(source: Any, **kwargs: Any) -> ActionResult:
         engine = ReportEngine(
-            use_slm=bool(kwargs.get("use_slm", False)),
+            use_slm=bool(kwargs.get("use_slm", True)),
             policy=_policy_from_args(kwargs),
         )
         plan = engine.plan(
@@ -54,7 +54,7 @@ def register_reporting_skilling_tools(surface: Any) -> Any:
                 warnings=["output is required"],
             )
         engine = ReportEngine(
-            use_slm=bool(kwargs.get("use_slm", False)),
+            use_slm=bool(kwargs.get("use_slm", True)),
             policy=_policy_from_args(kwargs),
         )
         artifact = engine.generate(
@@ -72,7 +72,7 @@ def register_reporting_skilling_tools(surface: Any) -> Any:
 
     def _validate(source: Any, **kwargs: Any) -> ActionResult:
         engine = ReportEngine(
-            use_slm=bool(kwargs.get("use_slm", False)),
+            use_slm=bool(kwargs.get("use_slm", True)),
             policy=_policy_from_args(kwargs),
         )
         validation = engine.validate(source)
@@ -83,7 +83,7 @@ def register_reporting_skilling_tools(surface: Any) -> Any:
         )
 
     common = {
-        "use_slm": {"type": "boolean", "default": False},
+        "use_slm": {"type": "boolean", "default": True},
         "profile": {
             "type": "string",
             "enum": ["production", "exploratory"],
@@ -181,7 +181,7 @@ def register_reporting_mcp_tools(registry: Any) -> Any:
 
     def _engine(args: Mapping[str, Any]) -> ReportEngine:
         return ReportEngine(
-            use_slm=bool(args.get("use_slm", False)),
+            use_slm=bool(args.get("use_slm", True)),
             policy=_policy_from_args(args),
             model_name=(
                 str(args.get("model_name")) if args.get("model_name") else None
@@ -256,7 +256,7 @@ def register_reporting_mcp_tools(registry: Any) -> Any:
 
     common = {
         "session_id": {"type": "string"},
-        "use_slm": {"type": "boolean", "default": False},
+        "use_slm": {"type": "boolean", "default": True},
         "profile": {
             "type": "string",
             "enum": ["production", "exploratory"],

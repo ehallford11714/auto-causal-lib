@@ -78,7 +78,7 @@ def _suite(args: Mapping[str, Any], key: str) -> DeepResearchSuite:
         return existing
     suite = DeepResearchSuite(
         policy=_policy(args),
-        use_slm=bool(args.get("use_slm") or False),
+        use_slm=bool(args.get("use_slm") if args.get("use_slm") is not None else True),
         model_name=args.get("model_name"),
         local_records=args.get("sources") or [],
     )
@@ -213,7 +213,7 @@ def register_research_tools(
         "allow_network": {"type": "boolean", "default": False},
         "external_network_consent": {"type": "boolean", "default": False},
         "approval_granted": {"type": "boolean", "default": False},
-        "use_slm": {"type": "boolean", "default": False},
+        "use_slm": {"type": "boolean", "default": True},
         "domain": {"type": "string"},
         "context": {"type": "object"},
     }

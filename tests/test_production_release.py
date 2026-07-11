@@ -39,7 +39,7 @@ def test_public_policy_contract_and_roundtrip():
     assert restored.stability is True
     assert restored.ensemble is True
     assert restored.allow_synthetic_iv is False
-    assert restored.allow_slm is False
+    assert restored.allow_slm is True
 
 
 def test_manifest_roundtrip_and_fingerprint_are_private_deterministic():
@@ -92,7 +92,7 @@ def test_production_iv_demo_integration_provenance_and_estimate_refute():
     provenance = iv_edge["provenance"]
     assert provenance["instrument_origin"] == "observed"
     assert provenance["run_id"] == result.run_id
-    assert provenance["package_version"] == "0.14.1"
+    assert provenance["package_version"] == "0.14.2"
     assert set(("z", "treatment", "outcome")) <= set(provenance["source_columns"])
 
     estimate = ac.estimate(
@@ -185,8 +185,10 @@ def test_privacy_external_payload_and_slm_gates():
     assert "person-0@example.test" not in str(summary)
     with pytest.raises(UnsafePayloadError):
         ac.external_payload(include_frame=True)
-    with pytest.raises(UnsafePayloadError):
-        ac.guide(use_slm=True)
+    # SLM guides by default; unstructured model output soft-falls to rules.
+    guided = ac.guide(use_slm=True, text="what drives outcome?")
+    assert guided is not None
+    assert ac.policy.allow_slm is True
 
     strict_privacy = AutoCausal.from_dataframe(
         df,

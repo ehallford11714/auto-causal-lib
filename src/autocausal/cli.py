@@ -40,6 +40,15 @@ def _parse_guides(raw: Optional[str]) -> Optional[list[str]]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def _cli_use_slm(args: argparse.Namespace) -> Optional[bool]:
+    """SLM guides by default; ``--no-slm`` forces rules; ``--slm`` forces try-on."""
+    if getattr(args, "no_slm", False):
+        return False
+    if getattr(args, "slm", False):
+        return True
+    return None
+
+
 def _load_ac(args: argparse.Namespace) -> AutoCausal:
     mode = getattr(args, "mode", None) or "exploratory"
     if getattr(args, "csv", None):
@@ -148,7 +157,8 @@ def _build_parser() -> argparse.ArgumentParser:
     d.add_argument("--min-corr", type=float, default=0.15, dest="min_corr")
     d.add_argument("--no-iv", action="store_true")
     d.add_argument("--guide", action="store_true", help="Run rule/SLM guide after discover")
-    d.add_argument("--slm", action="store_true", help="Enable HuggingFace SLM guide")
+    d.add_argument("--slm", action="store_true", help="Force HuggingFace SLM guide (default: on)")
+    d.add_argument("--no-slm", action="store_true", help="Force rule-only guide")
     d.add_argument("--ground", action="store_true", help="Ground edges against glossaries")
     d.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
     d.add_argument("-o", "--out", type=str, default=None)
@@ -182,7 +192,8 @@ def _build_parser() -> argparse.ArgumentParser:
     g = sub.add_parser("guide", help="SLM/rule guide from mine+discover outputs")
     _add_source_args(g)
     g.add_argument("--text", type=str, default=None, help="User question / hint")
-    g.add_argument("--slm", action="store_true", help="Use HuggingFace SLM (needs autocausal[slm])")
+    g.add_argument("--slm", action="store_true", help="Force HuggingFace SLM (default: on)")
+    g.add_argument("--no-slm", action="store_true", help="Force rule-only guide")
     g.add_argument(
         "--guides",
         type=str,
@@ -203,7 +214,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default="llmintent,retracement,kineteq_pivot,rule",
         help="Comma-separated guide backends",
     )
-    di.add_argument("--slm", action="store_true")
+    di.add_argument("--slm", action="store_true", help="Force SLM (default: on)")
+    di.add_argument("--no-slm", action="store_true", help="Force rule-only backends")
     di.add_argument("--no-second-pass", action="store_true")
     di.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     di.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
@@ -220,7 +232,8 @@ def _build_parser() -> argparse.ArgumentParser:
     cr = sub.add_parser("create", help="Propose causal questions / instruments / morphemes")
     _add_source_args(cr, require=False)
     cr.add_argument("--text", type=str, default=None)
-    cr.add_argument("--slm", action="store_true")
+    cr.add_argument("--slm", action="store_true", help="Force SLM (default: on)")
+    cr.add_argument("--no-slm", action="store_true", help="Force rule-only create")
     cr.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
     cr.add_argument("-o", "--out", type=str, default=None)
 
@@ -228,7 +241,8 @@ def _build_parser() -> argparse.ArgumentParser:
     inf = sub.add_parser("infer", help="Interpret discovery/IV results with caveats")
     _add_source_args(inf)
     inf.add_argument("--text", type=str, default=None)
-    inf.add_argument("--slm", action="store_true")
+    inf.add_argument("--slm", action="store_true", help="Force SLM (default: on)")
+    inf.add_argument("--no-slm", action="store_true", help="Force rule-only interpret")
     inf.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     inf.add_argument("--format", choices=["markdown", "json", "both"], default="markdown", dest="fmt")
     inf.add_argument("-o", "--out", type=str, default=None)
@@ -273,7 +287,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="mechanics-lite | markets-as-dynamics | affect-as-dynamics | auto",
     )
-    pl.add_argument("--slm", action="store_true")
+    pl.add_argument("--slm", action="store_true", help="Force SLM (default: on)")
+    pl.add_argument("--no-slm", action="store_true", help="Force rule-only physics guide")
     pl.add_argument("--impute", choices=["auto", "median_mode", "knn"], default="auto")
     pl.add_argument("--no-second-pass", action="store_true")
     pl.add_argument("--web-ground", action="store_true", dest="web_ground")
@@ -312,7 +327,8 @@ def _build_parser() -> argparse.ArgumentParser:
     a = sub.add_parser("auto", help="Full pipeline: join? mine impute discover guide ground")
     _add_source_args(a)
     a.add_argument("--text", type=str, default=None)
-    a.add_argument("--slm", action="store_true")
+    a.add_argument("--slm", action="store_true", help="Force SLM (default: on)")
+    a.add_argument("--no-slm", action="store_true", help="Force rule-only auto pipeline")
     a.add_argument(
         "--guides",
         type=str,
@@ -390,7 +406,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_source_args(ml_loop)
     ml_loop.add_argument("--text", type=str, default="")
     ml_loop.add_argument("--torch", action="store_true", help="Prefer PyTorch MLP when installed")
-    ml_loop.add_argument("--slm", action="store_true", help="Enable HuggingFace SLM guide")
+    ml_loop.add_argument("--slm", action="store_true", help="Force SLM guide (default: on)")
+    ml_loop.add_argument("--no-slm", action="store_true", help="Force rule-only ML loop")
     ml_loop.add_argument(
         "--guides",
         type=str,
@@ -728,7 +745,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_source_args(av)
     av.add_argument("--discover", action="store_true", help="Run discover before planning")
-    av.add_argument("--slm", action="store_true", help="Allow optional SLM enrichment")
+    av.add_argument("--slm", action="store_true", help="Force SLM enrichment (default: on)")
+    av.add_argument("--no-slm", action="store_true", help="Force rule-only viz planning")
     av.add_argument("--mode", choices=["exploratory", "production"], default="exploratory")
     av.add_argument("--format", choices=["markdown", "json"], default="json", dest="fmt")
     av.add_argument("-o", "--out", type=str, default=None)
@@ -753,7 +771,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default="production",
     )
     ra.add_argument("--format", type=str, default=None, help="Force format override")
-    ra.add_argument("--slm", action="store_true")
+    ra.add_argument("--slm", action="store_true", help="Force SLM report director (default: on)")
+    ra.add_argument("--no-slm", action="store_true", help="Force deterministic report director")
 
     # integrations — lazy optional-dependency catalog / routing / install plans
     from autocausal.integrations.cli import register_integrations_parser
@@ -929,7 +948,7 @@ def main(argv: list[str] | None = None) -> int:
             use_iv=not args.no_iv,
         )
         if args.guide or args.slm:
-            ac.guide(use_slm=args.slm)
+            ac.guide(use_slm=_cli_use_slm(args))
         if args.ground:
             ac.ground()
         if args.fmt == "json":
@@ -947,7 +966,7 @@ def main(argv: list[str] | None = None) -> int:
         ac.impute(method=args.impute)
         ac.discover()
         backends = _parse_guides(args.guides)
-        gres = ac.guide(text=args.text, use_slm=args.slm, backends=backends)
+        gres = ac.guide(text=args.text, use_slm=_cli_use_slm(args), backends=backends)
         if backends and ac.direction_plan is not None:
             payload = ac.direction_plan
             if args.fmt == "json":
@@ -978,7 +997,7 @@ def main(argv: list[str] | None = None) -> int:
         plan = ac.direct(
             text=args.text,
             backends=backends,
-            use_slm=args.slm,
+            use_slm=_cli_use_slm(args),
             second_pass=not args.no_second_pass,
         )
         if args.fmt == "json":
@@ -995,11 +1014,11 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.csv or args.parquet or args.db:
             ac = _load_ac(args)
-            cres = ac.create(text=args.text, use_slm=args.slm)
+            cres = ac.create(text=args.text, use_slm=_cli_use_slm(args))
         else:
             cres = create_from_context(
                 {"text": args.text or "", "columns": []},
-                use_slm=args.slm,
+                use_slm=_cli_use_slm(args),
             )
         if args.fmt == "json":
             text = cres.to_json()
@@ -1015,7 +1034,7 @@ def main(argv: list[str] | None = None) -> int:
         ac.mine()
         ac.impute(method=args.impute)
         ac.discover()
-        ires = ac.interpret(text=args.text, use_slm=args.slm)
+        ires = ac.interpret(text=args.text, use_slm=_cli_use_slm(args))
         if args.fmt == "json":
             text = ires.to_json()
         elif args.fmt == "both":
@@ -1146,7 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
                 horizon=args.horizon,
                 text=args.text,
                 domain=args.domain,
-                use_slm=args.slm,
+                use_slm=_cli_use_slm(args),
                 second_pass=not args.no_second_pass,
                 use_web_ground=args.web_ground,
                 impute_method=args.impute,
@@ -1214,7 +1233,7 @@ def main(argv: list[str] | None = None) -> int:
             loop = KPIMinedCausalLoop.from_autocausal(ac)
             result = loop.run(
                 text=args.text or "",
-                use_slm=bool(args.slm) or "huggingface" in guides,
+                use_slm=(_cli_use_slm(args) is not False) or ("huggingface" in guides),
                 use_torch=True if args.torch else None,
                 guides=guides,
                 horizon=args.horizon,
@@ -1264,7 +1283,7 @@ def main(argv: list[str] | None = None) -> int:
             table=args.table,
             query=args.query,
             text=args.text,
-            use_slm=args.slm,
+            use_slm=_cli_use_slm(args),
             guide_backends=_parse_guides(args.guides),
             join=args.join,
             join_on=join_on,
@@ -1672,7 +1691,7 @@ def main(argv: list[str] | None = None) -> int:
             ac.mine()
             ac.impute()
             ac.discover(use_iv=False, qc="off")
-        report = ac.autoviz(use_slm=bool(args.slm))
+        report = ac.autoviz(use_slm=_cli_use_slm(args))
         if args.fmt == "markdown" and hasattr(report, "to_markdown"):
             payload = report.to_markdown()
         elif hasattr(report, "to_json"):
@@ -1695,7 +1714,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.profile == "exploratory"
             else ReportPolicy.production()
         )
-        artifact = ReportEngine(use_slm=bool(args.slm), policy=policy).generate(
+        artifact = ReportEngine(
+            use_slm=_cli_use_slm(args) is not False, policy=policy
+        ).generate(
             source=ac,
             output=Path(args.output),
             format=args.format,
