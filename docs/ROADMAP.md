@@ -1,9 +1,12 @@
 # AutoCausalLib roadmap
 
-## Shipped in 0.11.3 — DiscoveryResult fabric exports
+## Shipped in 0.11.3 — DiscoveryResult post-discover handle
 
-- [x] `DiscoveryResult.to_fabric_bundle()` / `to_mine_report()` (aliases matching AutoCausal / AutoResult)
-- [x] `AutoResult.to_causal_edges()` / `to_search_dag()` / `to_mine_report()`
+- [x] `DiscoveryResult.to_fabric_bundle()` / `to_mine_report()` / `to_causaliv_request()` / `engines_status()`
+- [x] `DiscoveryResult.estimate()` / `refute()` / `sensitivity()` (session weakref + attached frame)
+- [x] `AutoResult` fabric / estimate / refute / sensitivity / causaliv parity
+- [x] `report()` aliases on MiningReport, suite reports, Insight/Agentic/Grail reports
+- [x] `tests/test_api_ergonomics.py` iris chain regression
 
 ## Shipped in 0.11.1 — docs + packaging
 

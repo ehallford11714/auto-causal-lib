@@ -381,6 +381,14 @@ class AutoCausal:
             result.notes = list(result.notes) + [
                 f"QC ok={self.qc_report.ok} issues={len(self.qc_report.issues)}"
             ]
+        if self.sensitivity_report is not None:
+            result.sensitivity_report = (
+                self.sensitivity_report.to_dict()
+                if hasattr(self.sensitivity_report, "to_dict")
+                else self.sensitivity_report
+            )
+        # Bind session + working frame so result.estimate / refute / fabric work standalone
+        result.bind_session(self, frame=work.copy(), source=self.source)
         self.result = result
         return result
 
@@ -550,7 +558,7 @@ class AutoCausal:
         )
         self.sensitivity_report = report
         if self.result is not None:
-            self.result.sensitivity = report.to_dict()
+            self.result.sensitivity_report = report.to_dict()
             self.result.notes = list(self.result.notes) + report.to_mine_notes()
         return report
 
@@ -653,31 +661,6 @@ class AutoCausal:
         self.roles = infer_column_roles(self._df)
         return feat
 
-    def refute(
-        self,
-        edge: Optional[dict[str, Any]] = None,
-        *,
-        method: str = "placebo",
-        **kwargs: Any,
-    ) -> Any:
-        """Soft refute hook (DoWhy real path / builtin placebo) — no-ops gracefully."""
-        from autocausal.suite_tools import refute as suite_refute
-
-        if edge is None and self.result is not None and self.result.edges:
-            edge = self.result.edges[0]
-        candidates = None
-        if self.result is not None:
-            candidates = self.result.candidates
-        result = suite_refute(
-            edge or {},
-            method=method,
-            df=self._df,
-            candidates=candidates,
-            **kwargs,
-        )
-        self.refute_results.append(result)
-        return result
-
     def estimate(
         self,
         *,
@@ -688,7 +671,13 @@ class AutoCausal:
         z: Optional[str] = None,
         **kwargs: Any,
     ) -> Any:
-        """Estimate ATE/CATE via builtin / DoubleML / EconML (soft-optional)."""
+        """Estimate ATE/CATE via builtin / DoubleML / EconML (soft-optional).
+
+        Primary session API. Equivalent chaining on the discover handle::
+
+            result = ac.discover()
+            result.estimate(backend="builtin_ols")
+        """
         from autocausal.engines import estimate as eng_estimate
 
         candidates = self.result.candidates if self.result is not None else None
@@ -705,8 +694,42 @@ class AutoCausal:
         if not hasattr(self, "estimate_results") or self.estimate_results is None:
             self.estimate_results = []
         self.estimate_results.append(result)
+        if self.result is not None:
+            self.result.estimate_results.append(result)
         return result
 
+    def refute(
+        self,
+        edge: Optional[dict[str, Any]] = None,
+        *,
+        method: str = "placebo",
+        **kwargs: Any,
+    ) -> Any:
+        """Soft refute hook (DoWhy real path / builtin placebo) — no-ops gracefully.
+
+        Primary session API. Equivalent chaining on the discover handle::
+
+            result = ac.discover()
+            result.refute(method="placebo")
+        """
+        from autocausal.suite_tools import refute as suite_refute
+
+        if edge is None and self.result is not None and self.result.edges:
+            edge = self.result.edges[0]
+        candidates = None
+        if self.result is not None:
+            candidates = self.result.candidates
+        result = suite_refute(
+            edge or {},
+            method=method,
+            df=self._df,
+            candidates=candidates,
+            **kwargs,
+        )
+        self.refute_results.append(result)
+        if self.result is not None:
+            self.result.refute_results.append(result)
+        return result
     def engines_status(self) -> dict[str, Any]:
         """Unified discovery/estimate/refute/package engine status."""
         from autocausal.engines import engine_status
@@ -1236,7 +1259,7 @@ class AutoCausal:
             ping=ping_info.to_dict() if ping_info is not None else None,
             source=ac.source,
             notes=notes,
-            sensitivity=sens.to_dict(),
+            sensitivity_report=sens.to_dict(),
             qc=ac.qc_report.to_dict() if ac.qc_report is not None else None,
             nlp_hints=ac.nlp_hints.to_dict() if ac.nlp_hints is not None and hasattr(ac.nlp_hints, "to_dict") else None,
         )

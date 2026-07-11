@@ -50,6 +50,19 @@ class MiningReport:
             backend=backend,
         )
 
+    def to_fabric_bundle(self, *, source: str = "", notes: Optional[list[str]] = None) -> dict[str, Any]:
+        """Assemble a FabricBundle.v1 with this mine report (no discovery edges)."""
+        from autocausal.contracts import fabric_bundle
+
+        return fabric_bundle(
+            mining=self,
+            discovery=None,
+            n_rows=self.n_rows,
+            n_cols=self.n_cols or len(self.columns),
+            source=source,
+            notes=list(notes or []) + list(self.notes or []),
+        )
+
     def to_markdown(self) -> str:
         lines = ["# AutoCausal mining report", ""]
         lines.append(f"**Columns profiled:** {len(self.columns)}")
@@ -104,6 +117,12 @@ class MiningReport:
                 lines.append(f"- {n}")
             lines.append("")
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
 
 
 _KPI_HINTS = (

@@ -119,7 +119,8 @@ ac.enrich_from_text("Does spend cause sales?")
 result = ac.discover(stability=True, bootstrap_n=12, ensemble=True)
 print(ac.to_fabric_bundle()["schema"])      # FabricBundle.v1
 print(result.to_fabric_bundle()["schema"])  # same via DiscoveryResult
-print(result.to_causal_edges()[0]["schema"] if result.to_causal_edges() else "CausalEdge.v1")
+est = result.estimate(backend="builtin_ols")  # also: ac.estimate(...)
+ref = result.refute(method="placebo")         # also: ac.refute(...)
 print(ac.to_causaliv_request()["schema"])
 
 # SLM/rule creation + inference

@@ -219,8 +219,8 @@ def connectivity_map() -> dict[str, Any]:
         "pipeline": "mine → discover(+causal-learn/lingam/gcastle) → estimate(DoubleML|EconML) → refute(DoWhy)",
         "library": {
             "discover": "autocausal.engines.discover_with / AutoCausal.discover(methods=[...])",
-            "estimate": "autocausal.engines.estimate / AutoCausal.estimate(backend=...)",
-            "refute": "autocausal.engines.refute / AutoCausal.refute(method=...)",
+            "estimate": "autocausal.engines.estimate / AutoCausal.estimate / DiscoveryResult.estimate",
+            "refute": "autocausal.engines.refute / AutoCausal.refute / DiscoveryResult.refute",
             "status": "autocausal.engines.engine_status / list_engines",
         },
         "cli": {

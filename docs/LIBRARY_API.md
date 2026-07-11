@@ -69,6 +69,14 @@ ac.estimate(backend="doubleml")        # soft-skip if missing
 ac.estimate(backend="econml")
 ac.refute(method="placebo")
 ac.refute(method="dowhy")              # real DoWhy when installed
+# Same methods on the discover() return value:
+result = ac.discover()
+result.estimate(backend="builtin_ols")
+result.refute(method="placebo")
+result.to_fabric_bundle()
+result.sensitivity(n_boot=8)
+result.to_causaliv_request()
+result.engines_status()
 from autocausal.engines import list_engines, engine_status, connectivity_map
 # also: from autocausal import list_engines, engine_status
 engine_status()

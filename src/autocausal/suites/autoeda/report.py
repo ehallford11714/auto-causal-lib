@@ -137,3 +137,9 @@ class EDAReport:
 
     def write(self, path: Union[str, Path], *, fmt: str = "auto") -> Path:
         return write_report(self, path, fmt=fmt)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()

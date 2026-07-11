@@ -62,19 +62,54 @@ def test_discovery_result_fabric_exports():
     dag = result.to_search_dag()
     assert dag["schema"] == SCHEMA_SEARCH_DAG
 
-    mine = result.to_mine_report(n_rows=len(ac._df), n_cols=len(ac._df.columns))
+    mine = result.to_mine_report()
     assert mine["schema"] == SCHEMA_MINE_REPORT
 
-    bundle = result.to_fabric_bundle(n_rows=len(ac._df), n_cols=len(ac._df.columns))
+    bundle = result.to_fabric_bundle()
     assert bundle["schema"] == SCHEMA_FABRIC_BUNDLE
     assert bundle["payload"]["mine_report"]["schema"] == SCHEMA_MINE_REPORT
     assert isinstance(bundle["payload"]["causal_edges"], list)
 
     auto = AutoResult(discovery=result, mining=result.mining, source="test")
-    assert auto.to_fabric_bundle(n_rows=60, n_cols=3)["schema"] == SCHEMA_FABRIC_BUNDLE
+    assert auto.to_fabric_bundle()["schema"] == SCHEMA_FABRIC_BUNDLE
     assert auto.to_causal_edges() == result.to_causal_edges()
     assert auto.to_search_dag()["schema"] == SCHEMA_SEARCH_DAG
-    assert auto.to_mine_report(n_rows=60, n_cols=3)["schema"] == SCHEMA_MINE_REPORT
+    assert auto.to_mine_report()["schema"] == SCHEMA_MINE_REPORT
+
+
+def test_discovery_result_estimate_refute_chain():
+    """Users call estimate/refute/to_fabric_bundle on discover() return value."""
+    ac = AutoCausal.from_dataframe(_toy_df())
+    result = ac.discover(qc="off", use_iv=False)
+    assert result.frame is not None
+    assert result.session() is ac
+
+    est = result.estimate(backend="builtin_ols", y="y", d="x")
+    assert est is not None
+    assert getattr(est, "ok", True)
+    assert len(result.estimate_results) == 1
+    assert len(ac.estimate_results) == 1
+
+    ref = result.refute(method="placebo")
+    assert ref is not None
+    assert len(result.refute_results) == 1
+    assert len(ac.refute_results) == 1
+
+    bundle = result.to_fabric_bundle()
+    assert bundle["schema"] == "FabricBundle.v1"
+    assert result.report()
+    assert isinstance(result.to_causal_edges(), list)
+
+    # Standalone path: drop session weakref, keep attached frame
+    result._owner_ref = None
+    est2 = result.estimate(backend="builtin_ols", y="y", d="x")
+    assert est2 is not None
+    assert getattr(est2, "ok", True)
+    ref2 = result.refute(method="placebo")
+    assert ref2 is not None
+    sens = result.run_sensitivity(n_boot=4, seed=1)
+    assert sens is not None
+    assert result.sensitivity_report is not None
 
 
 def test_auto_causal_report_after_discover():

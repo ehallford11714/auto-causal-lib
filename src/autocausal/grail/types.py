@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Optional, Union
 
 
 EPISTEMIC = (
@@ -256,3 +257,21 @@ class GrailReport:
         if self.notes:
             lines += ["## Notes", ""] + [f"- {n}" for n in self.notes] + [""]
         return "\n".join(lines)
+
+    def report(self, *, as_markdown: bool = True) -> str:
+        """Ergonomic alias for ``to_markdown()`` / ``to_json()``."""
+        if as_markdown:
+            return self.to_markdown()
+        return self.to_json()
+
+    def write(self, path: Union[str, Path], *, fmt: str = "markdown") -> Path:
+        """Write markdown or JSON report to ``path``."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if fmt == "json" or str(p).endswith(".json"):
+            p.write_text(self.to_json(), encoding="utf-8")
+        else:
+            if not p.suffix:
+                p = p.with_suffix(".md")
+            p.write_text(self.to_markdown(), encoding="utf-8")
+        return p

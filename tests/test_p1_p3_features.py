@@ -163,7 +163,7 @@ def test_sensitivity_on_autocausal():
     sens = ac.sensitivity(text="marketing conversion")
     assert sens.domain_hint
     assert ac.result is not None
-    assert ac.result.sensitivity is not None
+    assert ac.result.sensitivity_report is not None
 
 
 def test_join_align_generic():
@@ -242,7 +242,7 @@ def test_auto_result_fabric_and_py_typed():
         df.to_csv(f.name, index=False)
         path = f.name
     ar = AutoCausal.auto(path, text="x causes y", use_slm=False, second_pass=False)
-    assert ar.sensitivity is not None
+    assert ar.sensitivity_report is not None
     bundle = ar.to_fabric_bundle(n_rows=len(df), n_cols=len(df.columns))
     assert bundle["schema"] == SCHEMA_FABRIC_BUNDLE
     # round-trip json
