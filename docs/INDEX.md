@@ -45,7 +45,17 @@ Connectivity: `autocausal.engines` · CLI `engines|estimate|refute` · MCP `auto
 
 ```bash
 pip install auto-causal-lib
+# Base now includes: torch, transformers, accelerate, huggingface_hub,
+# langgraph, langchain-core, mcp, scikit-learn, nltk, httpx, pyarrow
 pip install "auto-causal-lib[causal-extra]"   # heavy causal engines
-pip install "auto-causal-lib[mcp]"            # MCP SDK for stdio server
+pip install "auto-causal-lib[bitsandbytes]"   # CUDA 4-bit only
 pip install "auto-causal-lib[all]"
+```
+
+Local Qwen (hardware-selected Instruct)::
+
+```bash
+python -m autocausal slm setup-qwen
+python -m autocausal slm-loop --no-slm   # rule path
+# Full Qwen tests: set AUTOCAUSAL_TEST_QWEN=1
 ```

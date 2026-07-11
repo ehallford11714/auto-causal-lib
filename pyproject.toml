@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auto-causal-lib"
-version = "0.11.5"
-description = "Auto-impute, SLM-directed AutoCleanse/AutoEDA/AutoMine suites, agentic causal loop (compact+memory), Kineteq GRAIL soft loop, MCP/AgentHook connective tools, mine, discover, public multi-source causal mining, NLTK NLP hints, behavioral science traces, KPI ML loops (SLMâ†’PyTorch), physics predictive loop + Streamlit demo, direction guides, SLM create/infer, tool suite, and ground exploratory causal relationships from CSV and SQL databases."
+version = "0.12.0"
+description = "Auto-impute, SLM-directed suites, agentic LangGraph/FSM causal loop (Qwen/HF), GRAIL, MCP tools, mine/discover, public causal mining, NLP, behavioral traces, KPI ML, physics demo, guides, and exploratory causal grounding from CSV/SQL."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "AutoCausalLib" }]
-keywords = ["causal", "imputation", "discovery", "sqlalchemy", "tabular", "mining"]
+keywords = ["causal", "imputation", "discovery", "sqlalchemy", "tabular", "mining", "langgraph", "slm"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -22,11 +22,22 @@ dependencies = [
   "numpy>=1.24",
   "pandas>=2.0",
   "sqlalchemy>=2.0",
+  "scikit-learn>=1.3",
+  "nltk>=3.8",
+  "httpx>=0.27",
+  "pyarrow>=14.0",
+  "torch>=2.0",
+  "transformers>=4.36",
+  "accelerate>=0.27",
+  "huggingface_hub>=0.20",
+  "langgraph>=0.2",
+  "langchain-core>=0.2",
+  "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pyarrow>=14.0"]
-datamine = []  # pip install -e ../DataMineLib â€” see autocausal.datamine_adapter
+dev = ["pytest>=7.0", "twine>=5.0", "build>=1.0"]
+datamine = []
 parquet = ["pyarrow>=14.0"]
 postgres = ["psycopg2-binary>=2.9"]
 vertica = ["vertica-python>=1.3"]
@@ -47,8 +58,9 @@ synapse = ["pyodbc>=5.0"]
 firebird = ["sqlalchemy-firebird>=0.8"]
 hana = ["sqlalchemy-hana>=0.5"]
 sqlite = []
-slm = ["torch>=2.0", "transformers>=4.36"]
+slm = ["torch>=2.0", "transformers>=4.36", "accelerate>=0.27", "huggingface_hub>=0.20"]
 torch = ["torch>=2.0"]
+bitsandbytes = ["bitsandbytes>=0.43"]
 sklearn = ["scikit-learn>=1.3"]
 ml = ["auto-causal-lib[torch,sklearn]"]
 nlp = ["nltk>=3.8", "gensim>=4.3"]
@@ -67,12 +79,12 @@ ui = ["streamlit>=1.28", "plotly>=5.18"]
 streamlit = ["auto-causal-lib[ui]"]
 suite = ["auto-causal-lib[nlp,slm,web,ml,ui]"]
 mcp = ["mcp>=1.0"]
-isolates = []  # pip install intentisolates â€” see autocausal.isolates_bridge
+isolates = []
 all-drivers = [
   "auto-causal-lib[postgres,vertica,mysql,mariadb,mssql,oracle,duckdb,snowflake,bigquery,redshift,cockroachdb,trino,presto,clickhouse,databricks,synapse,parquet]",
 ]
 all = [
-  "auto-causal-lib[nlp,slm,mcp,ui,ml,causal-extra,web,parquet,all-drivers]",
+  "auto-causal-lib[nlp,slm,mcp,ui,ml,causal-extra,web,parquet,all-drivers,bitsandbytes]",
 ]
 
 [project.scripts]
@@ -93,6 +105,9 @@ autocausal = ["py.typed", "data/**/*", "data/public/**/*", "data/examples/**/*",
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "slow: heavy model download / Qwen inference (set AUTOCAUSAL_TEST_QWEN=1)",
+]
 
 [tool.setuptools.exclude-package-data]
 autocausal = ["**/__pycache__/*", "**/*.pyc", "**/*.pyo"]

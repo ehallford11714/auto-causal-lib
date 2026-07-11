@@ -30,7 +30,20 @@ __all__ = [
     "infer_from_results",
     "slm_available",
     "slm_status",
+    "probe_hardware",
+    "recommend_qwen_model",
+    "ensure_local_qwen",
+    "DEFAULT_QWEN_CPU",
+    "DEFAULT_QWEN_SMALL",
+    "DEFAULT_QWEN_MID",
+    "DEFAULT_QWEN_LARGE",
 ]
+
+# Conservative Qwen2.5 Instruct picks by hardware class (exploratory SLM only).
+DEFAULT_QWEN_CPU = "Qwen/Qwen2.5-0.5B-Instruct"
+DEFAULT_QWEN_SMALL = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_QWEN_MID = "Qwen/Qwen2.5-3B-Instruct"
+DEFAULT_QWEN_LARGE = "Qwen/Qwen2.5-7B-Instruct"
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +346,246 @@ def slm_available() -> bool:
         return False
 
 
+def probe_hardware() -> dict[str, Any]:
+    """Best-effort local hardware snapshot for Qwen model selection."""
+    import shutil
+    import subprocess
+    import sys
+
+    info: dict[str, Any] = {
+        "python": sys.version.split()[0],
+        "cpu_count": os.cpu_count(),
+        "cuda": False,
+        "vram_gb": None,
+        "gpu_name": None,
+        "ram_gb": None,
+        "disk_free_gb": None,
+        "torch": None,
+        "notes": [],
+    }
+    try:
+        root = os.path.abspath(os.sep)
+        info["disk_free_gb"] = round(shutil.disk_usage(root).free / 1e9, 2)
+    except Exception as e:
+        info["notes"].append(f"disk probe soft-fail: {type(e).__name__}")
+
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            m = MEMORYSTATUSEX()
+            m.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                info["ram_gb"] = round(m.ullTotalPhys / 1e9, 2)
+                info["ram_avail_gb"] = round(m.ullAvailPhys / 1e9, 2)
+        else:
+            page = os.sysconf("SC_PAGE_SIZE")
+            info["ram_gb"] = round(os.sysconf("SC_PHYS_PAGES") * page / 1e9, 2)
+    except Exception as e:
+        info["notes"].append(f"RAM probe soft-fail: {type(e).__name__}")
+
+    try:
+        r = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=12,
+        )
+        line = (r.stdout or "").strip().splitlines()
+        if line and r.returncode == 0 and "failed" not in (r.stdout or "").lower():
+            parts = [p.strip() for p in line[0].split(",")]
+            if len(parts) >= 2:
+                info["gpu_name"] = parts[0]
+                try:
+                    # nvidia-smi memory is MiB when nounits
+                    info["vram_gb"] = round(float(parts[1]) / 1024.0, 2)
+                except (TypeError, ValueError):
+                    pass
+                info["nvidia_smi"] = line[0]
+        else:
+            info["notes"].append(
+                "nvidia-smi unavailable or insufficient permissions — treating as CPU."
+            )
+    except Exception as e:
+        info["notes"].append(f"nvidia-smi soft-fail: {type(e).__name__}")
+
+    try:
+        import torch
+
+        info["torch"] = getattr(torch, "__version__", "unknown")
+        info["cuda"] = bool(torch.cuda.is_available())
+        if info["cuda"]:
+            info["gpu_name"] = info["gpu_name"] or torch.cuda.get_device_name(0)
+            info["vram_gb"] = info["vram_gb"] or round(
+                torch.cuda.get_device_properties(0).total_memory / 1e9, 2
+            )
+    except Exception as e:
+        info["torch"] = None
+        info["notes"].append(f"torch soft-fail: {type(e).__name__}")
+
+    return info
+
+
+def recommend_qwen_model(hardware: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Pick a conservative Qwen2.5 Instruct id for local guide/create/infer.
+
+    Prefers instruct/chat models. Stays small on CPU or tight VRAM to avoid OOM.
+    """
+    hw = hardware or probe_hardware()
+    cuda = bool(hw.get("cuda"))
+    vram = hw.get("vram_gb")
+    ram = hw.get("ram_gb") or 0
+    try:
+        vram_f = float(vram) if vram is not None else 0.0
+    except (TypeError, ValueError):
+        vram_f = 0.0
+
+    load_in_4bit = False
+    if cuda and vram_f >= 24:
+        model = DEFAULT_QWEN_LARGE
+        reason = f"CUDA VRAM≈{vram_f}GB ≥24 — Qwen2.5-7B-Instruct"
+    elif cuda and vram_f >= 12:
+        model = DEFAULT_QWEN_MID
+        reason = f"CUDA VRAM≈{vram_f}GB (~12–16) — Qwen2.5-3B-Instruct"
+        load_in_4bit = vram_f < 14
+    elif cuda and vram_f >= 6:
+        model = DEFAULT_QWEN_SMALL
+        reason = f"CUDA VRAM≈{vram_f}GB (≤8–12) — Qwen2.5-1.5B-Instruct"
+        load_in_4bit = True
+    elif cuda and vram_f > 0:
+        model = DEFAULT_QWEN_CPU
+        reason = f"CUDA VRAM≈{vram_f}GB tight — Qwen2.5-0.5B-Instruct"
+        load_in_4bit = True
+    elif ram >= 32:
+        model = DEFAULT_QWEN_SMALL
+        reason = f"CPU-only with RAM≈{ram}GB — Qwen2.5-1.5B-Instruct (conservative)"
+    else:
+        model = DEFAULT_QWEN_CPU
+        reason = f"CPU-only / limited RAM≈{ram}GB — Qwen2.5-0.5B-Instruct"
+
+    # Respect explicit env override for recommendation reporting
+    env_model = (os.environ.get("AUTOCAUSAL_SLM_MODEL") or "").strip()
+    return {
+        "model_id": env_model or model,
+        "recommended_model_id": model,
+        "reason": reason,
+        "load_in_4bit": load_in_4bit and cuda,
+        "hardware": hw,
+        "epistemic": "SLM guides analysis; does not identify causation.",
+    }
+
+
+def ensure_local_qwen(
+    *,
+    model_id: Optional[str] = None,
+    download: bool = True,
+    set_env: bool = True,
+    token: Optional[str] = None,
+) -> dict[str, Any]:
+    """Probe hardware, pick Qwen Instruct, optionally download into HF cache.
+
+    Soft-fails on network/auth errors. Never prints tokens.
+    Token resolution order: ``token`` arg → ``HF_TOKEN`` / ``HUGGINGFACE_HUB_TOKEN``
+    env → ``.env`` in cwd / package parent (keys only; values not logged).
+    """
+    rec = recommend_qwen_model()
+    mid = (model_id or rec["model_id"] or rec["recommended_model_id"]).strip()
+    out: dict[str, Any] = {
+        "ok": False,
+        "model_id": mid,
+        "recommended": rec,
+        "cache_dir": None,
+        "downloaded": False,
+        "env_set": False,
+        "notes": [
+            "Epistemic: SLM guides AutoCausal analysis; it does not identify causation.",
+        ],
+    }
+
+    if set_env:
+        os.environ["AUTOCAUSAL_SLM_MODEL"] = mid
+        os.environ.setdefault("AUTOCAUSAL_SLM", "1")
+        out["env_set"] = True
+
+    # Resolve HF token without echoing secrets
+    tok = token or os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    if not tok:
+        tok = _read_dotenv_token(("HF_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HUGGING_FACE_HUB_TOKEN"))
+
+    if not download:
+        out["ok"] = True
+        out["notes"].append("download=False — model id recorded only.")
+        return out
+
+    try:
+        from huggingface_hub import snapshot_download  # type: ignore
+    except Exception as e:
+        out["notes"].append(
+            f"huggingface_hub missing ({type(e).__name__}); pip install huggingface_hub. "
+            "Rule backend still works."
+        )
+        return out
+
+    try:
+        cache = snapshot_download(repo_id=mid, token=tok)
+        out["cache_dir"] = str(cache)
+        out["downloaded"] = True
+        out["ok"] = True
+        out["notes"].append(f"Cached locally under HF hub cache for `{mid}`.")
+    except Exception as e:
+        out["notes"].append(
+            f"Download soft-fail ({type(e).__name__}): network/auth may block. "
+            "Set HF_TOKEN or retry later; rule backend remains available."
+        )
+        # Still ok for wiring if transformers can resolve later
+        out["ok"] = False
+    return out
+
+
+def _read_dotenv_token(keys: tuple[str, ...]) -> Optional[str]:
+    """Load a token from nearby .env files without logging values."""
+    from pathlib import Path
+
+    candidates = [
+        Path.cwd() / ".env",
+        Path(__file__).resolve().parents[2] / ".env",
+        Path(__file__).resolve().parents[3] / ".env",
+    ]
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                s = line.strip()
+                if not s or s.startswith("#") or "=" not in s:
+                    continue
+                k, _, v = s.partition("=")
+                if k.strip() in keys:
+                    val = v.strip().strip('"').strip("'")
+                    if val:
+                        return val
+        except Exception:
+            continue
+    return None
+
+
 def slm_status() -> dict[str, Any]:
     """Backend availability snapshot for status UIs (e.g. CausalBridge)."""
     env_on = _env_flag("AUTOCAUSAL_SLM", "EMOTIVEVISION_SLM", "CAUSALIV_SLM")
@@ -352,19 +605,27 @@ def slm_status() -> dict[str, Any]:
     except Exception as e:
         if err is None:
             err = f"torch: {type(e).__name__}: {e}"
+    rec = recommend_qwen_model()
     return {
         "rule_backend": True,
         "env_slm_enabled": env_on,
         "transformers_installed": transformers_ok,
         "torch_installed": torch_ok,
         "huggingface_ready": transformers_ok and torch_ok,
-        "default_model": os.environ.get("AUTOCAUSAL_SLM_MODEL") or "sshleifer/tiny-gpt2",
+        "default_model": os.environ.get("AUTOCAUSAL_SLM_MODEL")
+        or rec.get("recommended_model_id")
+        or DEFAULT_QWEN_SMALL,
+        "recommended_qwen": rec,
         "recommended_instruct": [
-            "Qwen/Qwen2.5-0.5B-Instruct",
+            DEFAULT_QWEN_CPU,
+            DEFAULT_QWEN_SMALL,
+            DEFAULT_QWEN_MID,
+            DEFAULT_QWEN_LARGE,
             "HuggingFaceTB/SmolLM2-360M-Instruct",
-            "microsoft/Phi-3-mini-4k-instruct",
         ],
+        "hardware": rec.get("hardware"),
         "error": err,
+        "epistemic": "SLM guides analysis; does not identify causation.",
     }
 
 
@@ -666,19 +927,39 @@ RuleGuide = RuleBackend
 
 
 class HuggingFaceSLM:
-    """Lazy Hugging Face transformers backend (optional heavy deps)."""
+    """Lazy Hugging Face transformers backend (optional heavy deps).
+
+    Prefer instruct/chat models via ``AUTOCAUSAL_SLM_MODEL`` (e.g. Qwen2.5-*-Instruct).
+    Soft-fails to ``RuleBackend`` enrichment when load/generate fails.
+    """
 
     name = "huggingface"
 
-    def __init__(self, model_name: Optional[str] = None) -> None:
-        self.model_name = (
-            model_name
-            or os.environ.get("AUTOCAUSAL_SLM_MODEL")
-            or "sshleifer/tiny-gpt2"
-        )
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        *,
+        load_in_4bit: Optional[bool] = None,
+    ) -> None:
+        env_model = os.environ.get("AUTOCAUSAL_SLM_MODEL")
+        if model_name:
+            self.model_name = model_name
+        elif env_model:
+            self.model_name = env_model
+        else:
+            # Safe default for CI; call ensure_local_qwen() / set AUTOCAUSAL_SLM_MODEL for Qwen.
+            self.model_name = "sshleifer/tiny-gpt2"
+        self.load_in_4bit = load_in_4bit
         self._pipe = None
+        self._tokenizer = None
         self._error: Optional[str] = None
         self._rule = RuleBackend()
+        self._is_chat = self._detect_chat(self.model_name)
+
+    @staticmethod
+    def _detect_chat(name: str) -> bool:
+        low = (name or "").lower()
+        return any(k in low for k in ("instruct", "chat", "qwen", "phi-3", "smollm"))
 
     def _ensure(self) -> bool:
         if self._pipe is not None:
@@ -686,33 +967,128 @@ class HuggingFaceSLM:
         if self._error:
             return False
         try:
-            from transformers import pipeline  # type: ignore
+            from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline  # type: ignore
         except ImportError as e:
             self._error = (
-                "transformers not installed; pip install 'autocausal[slm]'. "
-                f"({e})"
+                "transformers not installed; pip install 'auto-causal-lib' "
+                f"(base now includes transformers). ({e})"
             )
             return False
         try:
-            self._pipe = pipeline(
-                "text-generation",
-                model=self.model_name,
-                max_new_tokens=120,
-            )
+            import torch
+        except Exception as e:
+            self._error = f"torch required for HF SLM: {type(e).__name__}: {e}"
+            return False
+
+        try:
+            tok_kwargs: dict[str, Any] = {"trust_remote_code": True}
+            model_kwargs: dict[str, Any] = {"trust_remote_code": True}
+            device = -1
+            use_4bit = self.load_in_4bit
+            if use_4bit is None:
+                use_4bit = bool(torch.cuda.is_available()) and _env_flag(
+                    "AUTOCAUSAL_SLM_4BIT"
+                )
+            if torch.cuda.is_available():
+                device = 0
+                if use_4bit:
+                    try:
+                        import bitsandbytes  # noqa: F401
+
+                        from transformers import BitsAndBytesConfig  # type: ignore
+
+                        model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_compute_dtype=torch.float16,
+                        )
+                        model_kwargs["device_map"] = "auto"
+                        device = None  # type: ignore[assignment]
+                    except Exception:
+                        use_4bit = False
+
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name, **tok_kwargs)
+            if getattr(tokenizer, "pad_token", None) is None and getattr(
+                tokenizer, "eos_token", None
+            ):
+                tokenizer.pad_token = tokenizer.eos_token
+
+            # Prefer pipeline for simplicity; fall back to manual if needed
+            pipe_kwargs: dict[str, Any] = {
+                "model": self.model_name,
+                "tokenizer": tokenizer,
+                "trust_remote_code": True,
+                "max_new_tokens": 160,
+            }
+            if device is not None:
+                pipe_kwargs["device"] = device
+            if "quantization_config" in model_kwargs:
+                # Load model explicitly for 4bit
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name, **model_kwargs
+                )
+                pipe_kwargs["model"] = model
+                pipe_kwargs.pop("device", None)
+
+            self._pipe = pipeline("text-generation", **pipe_kwargs)
+            self._tokenizer = tokenizer
             return True
         except Exception as e:
             self._error = f"SLM load failed (soft-fail): {type(e).__name__}: {e}"
             return False
 
-    def _generate(self, prompt: str) -> str:
+    def _format_prompt(self, system: str, user: str) -> str:
+        if self._is_chat and self._tokenizer is not None:
+            try:
+                messages = [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ]
+                apply = getattr(self._tokenizer, "apply_chat_template", None)
+                if callable(apply):
+                    return apply(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
+            except Exception:
+                pass
+        return f"{system}\n\n{user}\n\nAssistant:"
+
+    def _generate(self, prompt: str, *, system: str = "") -> str:
         if not self._ensure():
             return ""
         try:
             assert self._pipe is not None
-            out = self._pipe(prompt, do_sample=False, truncation=True)
-            text = out[0]["generated_text"] if out else ""
-            if text.startswith(prompt):
-                text = text[len(prompt) :]
+            full = (
+                self._format_prompt(
+                    system
+                    or (
+                        "You are a cautious causal analysis assistant. "
+                        "Guide exploratory analysis only; never claim identification."
+                    ),
+                    prompt,
+                )
+                if self._is_chat
+                else (
+                    (system + "\n\n" if system else "")
+                    + prompt
+                )
+            )
+            out = self._pipe(
+                full,
+                do_sample=False,
+                truncation=True,
+                return_full_text=False,
+            )
+            if not out:
+                return ""
+            text = out[0].get("generated_text") or ""
+            if isinstance(text, list):
+                # some chat pipelines return message lists
+                text = " ".join(str(x) for x in text)
+            text = str(text).strip()
+            if text.startswith(full):
+                text = text[len(full) :]
             return text.strip()[:2000]
         except Exception as e:
             self._error = f"SLM generate soft-fail: {type(e).__name__}: {e}"
@@ -725,14 +1101,19 @@ class HuggingFaceSLM:
             base.notes.append(self._error or "HF SLM unavailable")
             return base
 
-        prompt = (
-            "You are a causal analysis assistant. Given this summary, list next steps "
-            "as short bullets: columns to inspect, edges to validate/drop, instruments, "
-            "confounders, search queries.\n\n"
+        user = (
+            "Given this summary, list next steps as short bullets: columns to inspect, "
+            "edges to validate/drop, instruments, confounders, search queries.\n\n"
             + _context_summary(context)
-            + "\n\nSuggestions:\n-"
+            + "\n\nSuggestions:"
         )
-        text = self._generate(prompt)
+        text = self._generate(
+            user,
+            system=(
+                "You guide AutoCausal exploratory analysis. "
+                "Associations are not causation. Be concise."
+            ),
+        )
         if not text:
             base.backend = "rule+hf_error"
             base.notes.append(self._error or "SLM generate failed")
@@ -760,18 +1141,20 @@ class HuggingFaceSLM:
             base.suggestions.append(
                 GuideSuggestion(action=action, detail=line[:300], priority=0.55)
             )
-        base.notes.append("HuggingFace SLM used; parse is heuristic.")
+        base.notes.append(
+            "HuggingFace SLM used; parse is heuristic. Not causal identification."
+        )
         return base
 
     def create(self, context: dict[str, Any]) -> CreationResult:
         base = self._rule.create(context)
-        prompt = (
+        text = self._generate(
             "Propose causal questions, instruments (Z), and role tags from this context. "
             "Short bullets only.\n\n"
             + _context_summary(context)
-            + "\n\nProposals:\n-"
+            + "\n\nProposals:",
+            system="Propose exploratory questions only; do not claim effects are identified.",
         )
-        text = self._generate(prompt)
         if not text:
             base.backend = "rule+hf_unavailable" if self._error else base.backend
             if self._error:
@@ -799,12 +1182,15 @@ class HuggingFaceSLM:
 
     def infer(self, context: dict[str, Any]) -> InferenceResult:
         base = self._rule.infer(context)
-        prompt = (
+        text = self._generate(
             "Interpret these causal results cautiously. Give a short narrative and caveats.\n\n"
             + _context_summary(context)
-            + "\n\nInterpretation:\n"
+            + "\n\nInterpretation:",
+            system=(
+                "Interpret exploratory results only. Always include caveats that "
+                "associations are not identified causal effects."
+            ),
         )
-        text = self._generate(prompt)
         if not text:
             base.backend = "rule+hf_unavailable" if self._error else base.backend
             if self._error:
@@ -812,11 +1198,13 @@ class HuggingFaceSLM:
             return base
         base.raw_text = text
         base.backend = f"huggingface:{self.model_name}"
-        # Prefer SLM narrative but keep rule caveats
         base.narrative = (text.split("\n")[0][:500] or base.narrative)
         for line in re.split(r"[\n;]+", text):
             line = line.strip(" -*\t")
-            if any(k in line.lower() for k in ("caveat", "warning", "not causal", "confound", "weak")):
+            if any(
+                k in line.lower()
+                for k in ("caveat", "warning", "not causal", "confound", "weak")
+            ):
                 if line not in base.caveats:
                     base.caveats.append(line[:240])
         base.notes.append("HuggingFace SLM inference; caveats still apply.")

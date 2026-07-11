@@ -27,12 +27,13 @@ Automatically **impute** missing tabular fields and discover *exploratory* causa
 - **Insight suite** (`autocausal.insight`) - `InsightReport` + optional SLM; **closed research loop** recommends experiments and mines further (`run_loop` / `ExperimentRecommender`) ([docs/INSIGHT_SUITE.md](docs/INSIGHT_SUITE.md))
 - **Auto suites** (`autocausal.suites`) - **SLM-directed** `AutoCleanseSuite` / `AutoEDASuite` / `AutoMineSuite` with dedicated action modules + `autocausal.skilling` tool surface ([docs/SUITES.md](docs/SUITES.md), [docs/SLM_SKILLING.md](docs/SLM_SKILLING.md))
 - **MCP connective** (`autocausal.mcp` / `autocausal.connective`) - Model Context Protocol stdio server + in-process `AgentHook` so other agents can load/cleanse/mine/discover/report ([docs/MCP.md](docs/MCP.md))
-- **Agentic loop** (`autocausal.agentic`) - SLM-guided cyclic FSM: hypothesize → skill → validate → compact → persist → route, with MEM1-inspired memory + ACON-inspired compaction ([docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md))
+- **Agentic loop** (`autocausal.agentic`) - SLM-guided cyclic FSM + **LangGraph chain** (`run_slm_langgraph_loop` / `ac.slm_loop`): hypothesize → skill → validate → compact → insight → route ([docs/AGENTIC_LOOP.md](docs/AGENTIC_LOOP.md))
+- **Local Qwen** - `ensure_local_qwen()` / `python -m autocausal slm setup-qwen` probes hardware and caches a fitting Instruct model
 - **Fabric contracts** - `to_mine_report` / `to_causal_edges` / `to_fabric_bundle` / `to_search_dag` aligned with shared Causal Fabric schemas ([docs/LIBRARY_API.md](docs/LIBRARY_API.md))
 - **Discovery stability & ensemble** - bootstrap per-edge stability (honest confidence); multi-method consensus (`pc_lite` + `corr_skeleton` + `mi_stub`)
 - **QC gate** - `autocausal.qc.validate_frame` before discover (ID leakage / bad keys)
-- **Panel / join / IV handoff** - `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks
-- **Causal backends (0.11)** - soft `causal-learn` / LiNGAM / gCastle discovery; DoubleML + EconML estimate; real DoWhy refute ([docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md))
+- **Panel / join / IV handoff** - `PanelSpec`, `join.align`, `to_causaliv_request`, sensitivity + soft refute hooks; optional exploratory `auto_instrument`
+- **Causal backends** - soft `causal-learn` / LiNGAM / gCastle discovery; DoubleML + EconML estimate; real DoWhy refute ([docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md))
 - **Engines surface** - `autocausal.engines` list/status + CLI `engines` / `estimate` / `refute`; MCP `autocausal_list_engines` / `_estimate` / `_refute`
 - Markdown / JSON reports and a CLI
 
@@ -50,28 +51,26 @@ From [PyPI](https://pypi.org/project/auto-causal-lib/):
 
 ```bash
 pip install auto-causal-lib
-pip install "auto-causal-lib[all]"   # nlp + slm + mcp + ui + ml + causal-extra + web + drivers
+# Base includes: numpy, pandas, sqlalchemy, scikit-learn, nltk, httpx, pyarrow,
+# torch, transformers, accelerate, huggingface_hub, langgraph, langchain-core, mcp
+pip install "auto-causal-lib[all]"   # + ui + causal-extra + drivers + bitsandbytes
 ```
 
-Optional extras (soft deps; core works without them):
+Optional extras (still soft; core already has SLM/LangGraph/MCP):
 
 ```bash
-pip install "auto-causal-lib[nlp]"           # nltk + gensim
-pip install "auto-causal-lib[slm]"           # torch + transformers (lazy load)
-pip install "auto-causal-lib[mcp]"           # MCP stdio server for other agents
-pip install "auto-causal-lib[ui]"            # Streamlit physics demo (+ plotly)
-pip install "auto-causal-lib[ml]"            # torch + scikit-learn
-pip install "auto-causal-lib[causal-extra]"  # causal-learn, DoWhy, DoubleML, EconML, lingam, gCastle
-pip install "auto-causal-lib[postgres]"      # and other DB drivers - see docs/CONNECTIONS.md
+pip install "auto-causal-lib[bitsandbytes]" # CUDA 4-bit Qwen
+pip install "auto-causal-lib[ui]"           # Streamlit physics demo (+ plotly)
+pip install "auto-causal-lib[causal-extra]" # causal-learn, DoWhy, DoubleML, EconML, lingam, gCastle
+pip install "auto-causal-lib[postgres]"     # and other DB drivers - see docs/CONNECTIONS.md
 ```
 
-First-class modules in every wheel (no heavy deps required): `insight`, `mcp`/`connective`, `skilling`, `cli`, `backends`/`engines`, `agentic`, `grail`, `suites`.
-
 ```bash
+python -m autocausal slm setup-qwen   # probe hardware + download recommended Qwen Instruct
+python -m autocausal slm-loop --no-slm
 python -m autocausal engines status
 python -m autocausal insight --help
-python -m autocausal skilling list
-python -m autocausal.mcp          # needs [mcp] for SDK; AgentHook works without it
+python -m autocausal.mcp
 ```
 
 **Docs:** [docs/INDEX.md](docs/INDEX.md) (full map) · [docs/MODULES.md](docs/MODULES.md) · [docs/CLI.md](docs/CLI.md) · [docs/MCP.md](docs/MCP.md) · [docs/CAUSAL_BACKENDS.md](docs/CAUSAL_BACKENDS.md) · [docs/LIBRARY_API.md](docs/LIBRARY_API.md).
@@ -88,16 +87,16 @@ Env:
 | Variable | Effect |
 |----------|--------|
 | `AUTOCAUSAL_SLM=1` | Prefer HuggingFace SLM |
-| `AUTOCAUSAL_SLM_MODEL` | Model id (default `sshleifer/tiny-gpt2` for tests) |
+| `AUTOCAUSAL_SLM_MODEL` | Model id (set by `slm setup-qwen`; else tiny-gpt2 for tests) |
+| `AUTOCAUSAL_SLM_4BIT=1` | Prefer bitsandbytes 4-bit when CUDA available |
+| `AUTOCAUSAL_TEST_QWEN=1` | Enable slow Qwen pytest markers |
 | `AUTOCAUSAL_TORCH=1` | Prefer PyTorch MLP imputer/predictor when installed |
 | `AUTOCAUSAL_TORCH_TEST=1` | Enable gated torch unit tests |
 | `AUTOCAUSAL_LLMINTENT_MODEL` | Optional LLMIntent heavy analyzer model |
 | `AUTOCAUSAL_KINETEQ_MCP=1` + `KINETEQ_MCP_URL` | Live Kineteq MCP pivot embeddings / GRAIL |
 | `AUTOCAUSAL_GRAIL_MCP=1` | Also enables live GRAIL MCP calls |
 
-Better instruct SLMs (document only): `Qwen/Qwen2.5-0.5B-Instruct`, `HuggingFaceTB/SmolLM2-360M-Instruct`, `microsoft/Phi-3-mini-4k-instruct`.
-
-Core deps: `numpy`, `pandas`, `sqlalchemy`. See [docs/CONNECTIONS.md](docs/CONNECTIONS.md). Optional path deps: `pip install -e ../LLMIntent`.
+Recommended local Instruct: `python -m autocausal slm setup-qwen` (CPU ≈ `Qwen2.5-1.5B-Instruct` / `0.5B`; larger VRAM → 3B/7B).
 
 ## Quick start
 

@@ -16,6 +16,9 @@ __all__ = [
     "list_tools",
     "validate_pipeline",
     "slm_status",
+    "ensure_local_qwen",
+    "probe_hardware",
+    "recommend_qwen_model",
     "list_guides",
     "direct",
     "KPIMinedCausalLoop",
@@ -65,6 +68,9 @@ __all__ = [
     "AgenticCausalLoop",
     "AgenticLoopReport",
     "run_agentic_loop",
+    "SLMLangGraphChain",
+    "SLMChainReport",
+    "run_slm_langgraph_loop",
     "doctor_report",
 ]
 
@@ -179,10 +185,18 @@ def __getattr__(name: str):
         "GraphRuntime",
         "VectorStoreMemory",
         "AgentMemory",
+        "SLMLangGraphChain",
+        "SLMChainReport",
+        "run_slm_langgraph_loop",
+        "langgraph_available",
     ):
         from autocausal import agentic as _agentic
 
         return getattr(_agentic, name)
+    if name in ("ensure_local_qwen", "probe_hardware", "recommend_qwen_model"):
+        from autocausal import slm as _slm
+
+        return getattr(_slm, name)
     if name == "doctor_report":
         from autocausal.doctor import doctor_report
 

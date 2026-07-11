@@ -26,6 +26,12 @@ from autocausal.agentic.graph_runtime import (
     RuntimeResult,
     langgraph_available,
 )
+from autocausal.agentic.langgraph_chain import (
+    SLM_CHAIN_NODES,
+    SLMChainReport,
+    SLMLangGraphChain,
+    run_slm_langgraph_loop,
+)
 from autocausal.agentic.loop import AgenticCausalLoop, run_agentic_loop
 from autocausal.agentic.memory import (
     AgentMemory,
@@ -45,6 +51,10 @@ from autocausal.agentic.vector_memory import (
 __all__ = [
     "AgenticCausalLoop",
     "run_agentic_loop",
+    "SLMLangGraphChain",
+    "SLMChainReport",
+    "run_slm_langgraph_loop",
+    "SLM_CHAIN_NODES",
     "AgenticLoopReport",
     "LoopState",
     "Hypothesis",

@@ -1368,6 +1368,38 @@ class AutoCausal:
             **kwargs,
         )
 
+    def slm_loop(
+        self,
+        *,
+        text: str = "",
+        use_slm: bool = True,
+        model_name: Optional[str] = None,
+        max_rounds: int = 2,
+        persist_dir: Optional[Union[str, Path]] = None,
+        prefer_langgraph: bool = True,
+        ensure_qwen: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Run LangGraph/FSM SLM chain → ``SLMChainReport`` (insight + agentic).
+
+        Prefer::
+
+            from autocausal.agentic import run_slm_langgraph_loop
+        """
+        from autocausal.agentic.langgraph_chain import run_slm_langgraph_loop
+
+        return run_slm_langgraph_loop(
+            ac=self,
+            text=text,
+            max_rounds=max_rounds,
+            use_slm=use_slm,
+            model_name=model_name,
+            persist_dir=persist_dir,
+            prefer_langgraph=prefer_langgraph,
+            ensure_qwen=ensure_qwen,
+            **kwargs,
+        )
+
     def report(self, *, as_markdown: bool = True) -> str:
         """Render the last ``DiscoveryResult`` as markdown or JSON.
 

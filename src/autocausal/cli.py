@@ -500,6 +500,43 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("dialects", help="Print supported SQLAlchemy dialect matrix")
     sub.add_parser("slm-status", help="Show RuleBackend / HuggingFace SLM availability")
 
+    # slm — setup-qwen / status
+    slm_p = sub.add_parser("slm", help="Local SLM / Qwen setup and status")
+    slm_sub = slm_p.add_subparsers(dest="slm_cmd")
+    slm_sub.add_parser("status", help="Hardware + recommended Qwen + SLM readiness")
+    sq = slm_sub.add_parser("setup-qwen", help="Probe hardware, pick Qwen, download to HF cache")
+    sq.add_argument("--model", type=str, default=None, help="Override model id")
+    sq.add_argument("--no-download", action="store_true", help="Only set env / recommend")
+    sq.add_argument("--json", action="store_true", help="Emit JSON")
+
+    # slm-loop / langgraph — LangGraph/FSM SLM chain
+    sll = sub.add_parser(
+        "slm-loop",
+        help="Run LangGraph/FSM SLM chain (guide→skill→validate→compact→insight→route)",
+    )
+    _add_source_args(sll, require=False)
+    sll.add_argument("--text", type=str, default="")
+    sll.add_argument("--rounds", type=int, default=2)
+    sll.add_argument("--slm", action="store_true", default=True)
+    sll.add_argument("--no-slm", action="store_true")
+    sll.add_argument("--model", type=str, default=None)
+    sll.add_argument("--ensure-qwen", action="store_true")
+    sll.add_argument("--no-langgraph", action="store_true")
+    sll.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
+    sll.add_argument("-o", "--out", type=str, default=None)
+    # alias
+    lg = sub.add_parser("langgraph", help="Alias for slm-loop")
+    _add_source_args(lg, require=False)
+    lg.add_argument("--text", type=str, default="")
+    lg.add_argument("--rounds", type=int, default=2)
+    lg.add_argument("--slm", action="store_true", default=True)
+    lg.add_argument("--no-slm", action="store_true")
+    lg.add_argument("--model", type=str, default=None)
+    lg.add_argument("--ensure-qwen", action="store_true")
+    lg.add_argument("--no-langgraph", action="store_true")
+    lg.add_argument("--format", choices=["markdown", "json"], default="markdown", dest="fmt")
+    lg.add_argument("-o", "--out", type=str, default=None)
+
     return p
 
 
@@ -743,6 +780,61 @@ def main(argv: list[str] | None = None) -> int:
         from autocausal.slm import slm_status
 
         print(json.dumps(slm_status(), indent=2))
+        return 0
+
+    if args.command == "slm":
+        from autocausal.slm import ensure_local_qwen, slm_status
+
+        if args.slm_cmd in (None, "status"):
+            print(json.dumps(slm_status(), indent=2))
+            return 0
+        if args.slm_cmd == "setup-qwen":
+            res = ensure_local_qwen(
+                model_id=getattr(args, "model", None),
+                download=not bool(getattr(args, "no_download", False)),
+                set_env=True,
+            )
+            if getattr(args, "json", False):
+                print(json.dumps(res, indent=2, default=str))
+            else:
+                print(f"model: {res.get('model_id')}")
+                print(f"ok: {res.get('ok')} downloaded: {res.get('downloaded')}")
+                if res.get("cache_dir"):
+                    print(f"cache: {res['cache_dir']}")
+                for n in res.get("notes") or []:
+                    print(f"- {n}")
+            return 0 if res.get("ok") or getattr(args, "no_download", False) else 1
+        parser.parse_args(["slm", "--help"])
+        return 0
+
+    if args.command in ("slm-loop", "langgraph"):
+        from autocausal.agentic.langgraph_chain import run_slm_langgraph_loop
+        from autocausal.datasets import load_dataset
+
+        use_slm = not bool(getattr(args, "no_slm", False))
+        if getattr(args, "csv", None) or getattr(args, "parquet", None) or getattr(args, "db", None):
+            ac = _load_ac(args)
+            report = run_slm_langgraph_loop(
+                ac=ac,
+                text=getattr(args, "text", "") or "",
+                max_rounds=int(getattr(args, "rounds", 2)),
+                use_slm=use_slm,
+                model_name=getattr(args, "model", None),
+                prefer_langgraph=not bool(getattr(args, "no_langgraph", False)),
+                ensure_qwen=bool(getattr(args, "ensure_qwen", False)),
+            )
+        else:
+            report = run_slm_langgraph_loop(
+                load_dataset("iris"),
+                text=getattr(args, "text", "") or "iris drivers",
+                max_rounds=int(getattr(args, "rounds", 2)),
+                use_slm=use_slm,
+                model_name=getattr(args, "model", None),
+                prefer_langgraph=not bool(getattr(args, "no_langgraph", False)),
+                ensure_qwen=bool(getattr(args, "ensure_qwen", False)),
+            )
+        text = report.to_json() if args.fmt == "json" else report.to_markdown()
+        _emit(text, getattr(args, "out", None))
         return 0
 
     if args.command == "tools":

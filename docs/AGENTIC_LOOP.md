@@ -18,18 +18,48 @@ These arXiv works informed the *API shape* and memory/compaction ideas. AutoCaus
 | Constant-size agent memory | [MEM1 2506.15841](https://arxiv.org/abs/2506.15841) | `memory.EpisodicMemory` budget |
 | Evolving linked memory notes | [A-MEM 2502.12110](https://arxiv.org/abs/2502.12110) | `MemoryItem.links` between episodes |
 | FSM / cyclic agent orchestration | [StateFlow 2403.11322](https://arxiv.org/abs/2403.11322) | `graph_runtime.GraphRuntime` offline FSM |
-| Soft LangGraph-style cycles | LangGraph (optional) | same runtime, `prefer_langgraph=True` |
+| Soft LangGraph-style cycles | LangGraph (base dep) | `graph_runtime` + `langgraph_chain` |
 | Hybrid vector + structured LTM | [HippoRAG 2405.14831](https://arxiv.org/abs/2405.14831), [Mem0 2504.19413](https://arxiv.org/abs/2504.19413) | `vector_memory.VectorStoreMemory` |
+
+## SLM LangGraph chain
+
+Higher-level wrapper over the agentic loop + insight report::
+
+```python
+from autocausal.agentic import run_slm_langgraph_loop
+from autocausal import AutoCausal, load_dataset
+
+report = run_slm_langgraph_loop(
+    load_dataset("iris"),
+    text="petal drivers",
+    max_rounds=2,
+    use_slm=True,          # soft-fails to rules
+    prefer_langgraph=True, # base dep; FSM fallback if missing
+)
+print(report.to_markdown())
+
+ac = AutoCausal.from_dataframe(load_dataset("iris"))
+print(ac.slm_loop(text="petal", max_rounds=1, use_slm=False).report())
+```
+
+CLI::
+
+```bash
+python -m autocausal slm-loop --csv data.csv --rounds 2 --no-slm
+python -m autocausal langgraph --rounds 1   # iris demo
+python -m autocausal slm setup-qwen         # probe + download recommended Qwen
+```
+
+Chain conceptual nodes: hypothesize/guide → skill/tools → validate/discover → compact → insight → route.
 
 ## Install / soft deps
 
-Core loop needs only AutoCausal core (`numpy`, `pandas`). Optional:
+Base install (`pip install auto-causal-lib`) includes **langgraph**, **transformers**, **torch**, **huggingface_hub**, **mcp**.
 
 | Extra | Effect |
 |-------|--------|
-| `langgraph` | Soft cyclic graph backend (else FSM stub) |
+| `bitsandbytes` | CUDA 4-bit Qwen load |
 | `chromadb` / `faiss` | Soft vector backends (else in-memory TF-IDF) |
-| `autocausal[slm]` | HuggingFace SLM guidance (else rule policy) |
 
 Missing optionals **never** hard-crash the loop.
 
