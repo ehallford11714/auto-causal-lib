@@ -26,7 +26,7 @@ def _toy_df(n: int = 60, seed: int = 1) -> pd.DataFrame:
 
 
 def test_version_0_13_0():
-    assert __version__ == "0.14.0"
+    assert __version__ == "0.14.1"
 
 
 def test_discovery_result_report_alias():

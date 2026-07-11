@@ -134,6 +134,9 @@ __all__ = [
     "integration_status",
     "invoke_capability",
     "CapabilityRouter",
+    "library_help",
+    "build_help_catalog",
+    "HelpCatalog",
 ]
 
 
@@ -308,6 +311,10 @@ def __getattr__(name: str):
         from autocausal import integrations as _integrations
 
         return getattr(_integrations, name)
+    if name in ("library_help", "build_help_catalog", "HelpCatalog", "list_package_modules"):
+        from autocausal import help_catalog as _help
+
+        return getattr(_help, name)
     raise AttributeError(f"module 'autocausal' has no attribute {name!r}")
 
 

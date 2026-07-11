@@ -1,7 +1,12 @@
-"""CLI: python -m autocausal discover|mine|correlate|tabular-ml|autoviz|report-artifact|...
+"""CLI: python -m autocausal [--help] | help | discover | mine | correlate | ...
 
-Thin consumer of library modules — prefer importing ``autocausal.suites`` /
-``autocausal.nlp`` / ``autocausal.behavioral`` / ``autocausal.insight`` in apps.
+Thin consumer of library modules — prefer importing ``autocausal`` /
+``autocausal.suites`` / ``autocausal.nlp`` / ``autocausal.research`` in apps.
+
+Full module + function catalog::
+
+    python -m autocausal help --all
+    python -m autocausal help --module research
 """
 
 from __future__ import annotations
@@ -83,10 +88,57 @@ def _add_source_args(p: argparse.ArgumentParser, *, require: bool = True) -> Non
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="autocausal",
-        description="Auto-impute, mine, discover, guide, and ground causal edges.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "AutoCausal library CLI — mine, discover, estimate, research, report, "
+            "and inspect the full public API surface.\n\n"
+            f"Package version: {__version__}\n"
+            "Import in Python as `import autocausal` (PyPI name: auto-causal-lib)."
+        ),
     )
     p.add_argument("--version", action="version", version=f"autocausal {__version__}")
     sub = p.add_subparsers(dest="command")
+
+    # help — full library / module / API catalog
+    help_p = sub.add_parser(
+        "help",
+        help="Full library help: modules, AutoCausal methods, CLI, and public symbols",
+        description=(
+            "Emit a catalog of AutoCausal modules and public functions/classes. "
+            "Use --all for per-module symbols, --module to drill in, --api for "
+            "AutoCausal methods, or --cli for command listing."
+        ),
+    )
+    help_p.add_argument(
+        "--module",
+        type=str,
+        default=None,
+        help="Restrict to one package (e.g. research, inference, reporting)",
+    )
+    help_p.add_argument(
+        "--api",
+        action="store_true",
+        help="Focus on AutoCausal session methods",
+    )
+    help_p.add_argument(
+        "--cli",
+        action="store_true",
+        dest="cli_focus",
+        help="Focus on CLI commands",
+    )
+    help_p.add_argument(
+        "--all",
+        action="store_true",
+        dest="help_all",
+        help="Include public symbols for every module",
+    )
+    help_p.add_argument(
+        "--format",
+        choices=["markdown", "json", "table"],
+        default="markdown",
+        dest="fmt",
+    )
+    help_p.add_argument("-o", "--out", type=str, default=None)
 
     # discover
     d = sub.add_parser("discover", help="Impute + discover causal edges")
@@ -708,6 +760,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     register_integrations_parser(sub)
 
+    # Expand root --help after all subcommands exist.
+    from autocausal.help_catalog import root_help_epilog
+
+    p.epilog = root_help_epilog(p)
     return p
 
 
@@ -717,6 +773,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.command:
         parser.print_help()
+        return 0
+
+    if args.command == "help":
+        from autocausal.help_catalog import library_help
+
+        text = library_help(
+            module=getattr(args, "module", None),
+            api=bool(getattr(args, "api", False)),
+            cli=bool(getattr(args, "cli_focus", False)),
+            all=bool(getattr(args, "help_all", False)),
+            format=getattr(args, "fmt", "markdown"),
+            parser=parser,
+        )
+        _emit(text, getattr(args, "out", None))
         return 0
 
     if args.command == "dialects":

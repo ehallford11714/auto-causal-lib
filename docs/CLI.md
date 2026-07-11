@@ -4,11 +4,33 @@ Thin wrapper over library modules. Prefer importing `autocausal` in apps.
 
 ```bash
 python -m autocausal --help
+python -m autocausal help --all
+python -m autocausal help --module research
+python -m autocausal help --api
 python -m autocausal --version
 autocausal --help   # console script from pyproject
 ```
 
 > Outputs are exploratory — not causal identification.
+
+## Full library catalog
+
+| Command | Purpose |
+|---------|---------|
+| `help` | Catalog of modules, public symbols, AutoCausal methods, and CLI commands |
+| `help --all` | Include public functions/classes for every module |
+| `help --module NAME` | Drill into one package (`research`, `inference`, …) |
+| `help --api` | `AutoCausal` session methods |
+| `help --cli` | CLI command index |
+| `help --format json\|table\|markdown` | Machine- or human-readable output |
+
+Python API:
+
+```python
+from autocausal import library_help
+print(library_help(all=True))
+print(library_help(module="reporting"))
+```
 
 ## Global source flags
 

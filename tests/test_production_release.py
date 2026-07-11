@@ -92,7 +92,7 @@ def test_production_iv_demo_integration_provenance_and_estimate_refute():
     provenance = iv_edge["provenance"]
     assert provenance["instrument_origin"] == "observed"
     assert provenance["run_id"] == result.run_id
-    assert provenance["package_version"] == "0.14.0"
+    assert provenance["package_version"] == "0.14.1"
     assert set(("z", "treatment", "outcome")) <= set(provenance["source_columns"])
 
     estimate = ac.estimate(
